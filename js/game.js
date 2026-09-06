@@ -26,6 +26,8 @@ class GameEngine {
             this.highScore = 0;
         }
         this.stage = 1;
+        this.stageTarget = 8;
+        this.stageBubblesPopped = 0;
         this.advancingStage = false;
         this.combo = 0;
         this.comboTimer = 0;
@@ -34,6 +36,13 @@ class GameEngine {
         this.gameOver = false;
         this.gameWon = false;
         this.paused = false;
+
+        // Blitz Mode Tracking
+        this.blitzTimer = 60.0;
+        this.blitzBubblesPopped = 0;
+        this.blitzMaxCombo = 0;
+        this.blitzShotsFired = 0;
+        this.blitzShotsHit = 0;
 
         // Mode Manager (Arcade & VS)
         this.modeMgr = new ModeController();
@@ -279,18 +288,75 @@ class GameEngine {
     setupUI() {
         document.getElementById('high-score-val').innerText = this.highScore;
 
-        // Mode switch tabs
+        // 1. Initial Mode Selection Welcome Modal bindings
+        const modeSelectModal = document.getElementById('mode-select-modal');
+        const modeCards = document.querySelectorAll('.mode-card');
+        const chooseModeBtn = document.getElementById('btn-choose-mode');
+        const changeModeModalBtn = document.getElementById('modal-btn-change-mode');
+
+        if (chooseModeBtn) {
+            chooseModeBtn.addEventListener('click', () => this.showModeSelectModal());
+        }
+
+        if (changeModeModalBtn) {
+            changeModeModalBtn.addEventListener('click', () => {
+                this.hideModal();
+                this.showModeSelectModal();
+            });
+        }
+
+        // Mode cards click
+        modeCards.forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Ignore click if clicking directly inside difficulty buttons
+                if (e.target.closest('.card-difficulty-select') && !e.target.classList.contains('btn-mode-card')) {
+                    return;
+                }
+                const chosenMode = card.dataset.mode;
+                audio.init();
+                audio.startBGM();
+
+                // If VS mode, get selected difficulty
+                if (chosenMode === 'vs') {
+                    const activeDiffBtn = card.querySelector('.diff-btn.active');
+                    const diff = activeDiffBtn ? activeDiffBtn.dataset.diff : 'normal';
+                    this.setAIDifficulty(diff);
+                }
+
+                this.hideModeSelectModal();
+                this.startMode(chosenMode);
+            });
+        });
+
+        // Difficulty buttons inside Mode Select Modal
+        const modalDiffBtns = document.querySelectorAll('.modal-diff-group .diff-btn');
+        modalDiffBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const diff = btn.dataset.diff;
+                this.setAIDifficulty(diff);
+            });
+        });
+
+        // Difficulty buttons inside Sidebar
+        const sidebarDiffBtns = document.querySelectorAll('.sidebar-diff-group .diff-btn');
+        sidebarDiffBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const diff = btn.dataset.diff;
+                this.setAIDifficulty(diff);
+            });
+        });
+
+        // Mode switch tabs in sidebar
         const modeTabs = document.querySelectorAll('.mode-tab');
         modeTabs.forEach(tab => {
             tab.addEventListener('click', (e) => {
                 const mode = e.target.dataset.mode;
-                modeTabs.forEach(t => t.classList.remove('active'));
-                e.target.classList.add('active');
+                audio.init();
+                audio.startBGM();
                 this.startMode(mode);
             });
         });
-
-
 
         // Restart button
         const restartBtn = document.getElementById('btn-restart');
@@ -302,12 +368,10 @@ class GameEngine {
         const audioBtn = document.getElementById('btn-audio');
         if (audioBtn) {
             audioBtn.addEventListener('click', () => {
-                audio.init();
                 const isMuted = audio.toggleMute();
-                audioBtn.innerHTML = isMuted ? '🔇 靜音' : '🔊 音效';
+                audioBtn.innerHTML = isMuted ? '🔇 靜音' : '🔊 音樂開';
             });
         }
-
 
         // Build 4-Tier Cyber Palette for all 25 Primes
         this.renderAllPrimesPalette();
@@ -331,6 +395,40 @@ class GameEngine {
                 }
             });
         }
+    }
+
+    setAIDifficulty(level) {
+        if (this.aiController) {
+            this.aiController.setDifficulty(level);
+        }
+        // Sync active class on both modal and sidebar diff buttons
+        document.querySelectorAll('.diff-btn').forEach(b => {
+            if (b.dataset.diff === level) {
+                b.classList.add('active');
+            } else {
+                b.classList.remove('active');
+            }
+        });
+        const diffNames = { easy: '🟢 簡單 (65%)', normal: '🟡 普通 (85%)', hard: '🔴 困難 (98%)' };
+        const name = diffNames[level] || level;
+        this.floatingTexts.push(new FloatingText(this.width / 2, this.height * 0.4, `AI 難度已設為：${name}`, '#ffd700', 20));
+    }
+
+    showModeSelectModal() {
+        const modal = document.getElementById('mode-select-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+        }
+        this.paused = true;
+    }
+
+    hideModeSelectModal() {
+        const modal = document.getElementById('mode-select-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+        this.paused = false;
     }
 
     renderAllPrimesPalette() {
@@ -391,6 +489,15 @@ class GameEngine {
         this.gridOffsetY = 0;
         this.hideModal();
 
+        // Sync sidebar active mode tab
+        document.querySelectorAll('.mode-tab').forEach(t => {
+            if (t.dataset.mode === mode) {
+                t.classList.add('active');
+            } else {
+                t.classList.remove('active');
+            }
+        });
+
         // Initialize empty grid
         this.grid = [];
         for (let r = 0; r < this.maxRows; r++) {
@@ -402,6 +509,10 @@ class GameEngine {
         const layout = document.querySelector('.game-container-layout');
         const mainArea = document.querySelector('.game-main-area');
         const canvasContainer = document.getElementById('canvas-container');
+        const vsDiffPanel = document.getElementById('vs-difficulty-panel');
+        const stageStatItem = document.getElementById('stage-stat-item');
+        const stageProgressBox = document.getElementById('stage-progress-box');
+        const blitzTimerStatItem = document.getElementById('blitz-timer-stat-item');
 
         if (mode === 'vs') {
             if (aiArenaBox) aiArenaBox.style.display = 'flex';
@@ -409,12 +520,16 @@ class GameEngine {
             if (layout) layout.classList.add('vs-active');
             if (mainArea) mainArea.classList.add('vs-active');
             if (canvasContainer) canvasContainer.classList.add('vs-active');
+            if (vsDiffPanel) vsDiffPanel.style.display = 'block';
+            if (stageStatItem) stageStatItem.style.display = 'none';
+            if (stageProgressBox) stageProgressBox.style.display = 'none';
+            if (blitzTimerStatItem) blitzTimerStatItem.style.display = 'none';
 
             this.initCanvasSize();
 
             this.stage = 1;
             this.advancingStage = false;
-            this.gridAdvanceSpeed = 0; // In VS mode, bubbles advance via opponent attack rows!
+            this.gridAdvanceSpeed = 0; // In VS mode, bubbles advance via opponent attacks
             this.clearCombo = 0;
             this.clearComboTimer = 0;
 
@@ -430,19 +545,54 @@ class GameEngine {
                 this.aiController.reset(3);
             }
             this.updateVSScoreboard();
-        } else {
+        } else if (mode === 'blitz') {
             if (aiArenaBox) aiArenaBox.style.display = 'none';
             if (vsDivider) vsDivider.style.display = 'none';
             if (layout) layout.classList.remove('vs-active');
             if (mainArea) mainArea.classList.remove('vs-active');
             if (canvasContainer) canvasContainer.classList.remove('vs-active');
+            if (vsDiffPanel) vsDiffPanel.style.display = 'none';
+            if (stageStatItem) stageStatItem.style.display = 'none';
+            if (stageProgressBox) stageProgressBox.style.display = 'none';
+            if (blitzTimerStatItem) blitzTimerStatItem.style.display = 'flex';
+
+            this.initCanvasSize();
+
+            this.blitzTimer = 60.0;
+            this.blitzBubblesPopped = 0;
+            this.blitzMaxCombo = 0;
+            this.blitzShotsFired = 0;
+            this.blitzShotsHit = 0;
+            this.gridAdvanceSpeed = 0; // Blitz bubbles replenish dynamically, no crushing push
+            this.clearCombo = 0;
+            this.clearComboTimer = 0;
+
+            // Spawn initial 4 rows of Blitz targets
+            for (let r = 0; r < 4; r++) {
+                this.fillGridRow(r);
+            }
+            this.currentPrime = 2;
+        } else {
+            // Arcade Survival Mode
+            if (aiArenaBox) aiArenaBox.style.display = 'none';
+            if (vsDivider) vsDivider.style.display = 'none';
+            if (layout) layout.classList.remove('vs-active');
+            if (mainArea) mainArea.classList.remove('vs-active');
+            if (canvasContainer) canvasContainer.classList.remove('vs-active');
+            if (vsDiffPanel) vsDiffPanel.style.display = 'none';
+            if (stageStatItem) stageStatItem.style.display = 'flex';
+            if (stageProgressBox) stageProgressBox.style.display = 'flex';
+            if (blitzTimerStatItem) blitzTimerStatItem.style.display = 'none';
 
             this.initCanvasSize();
 
             this.stage = 1;
+            this.stageTarget = 8;
+            this.stageBubblesPopped = 0;
             this.advancingStage = false;
-            this.gridAdvanceSpeed = 0.06;
-            // Spawn initial 3 rows of tightly packed bubbles
+            this.gridAdvanceSpeed = 0.05;
+
+            // Spawn initial 3 rows of stage 1 bubbles
             for (let r = 0; r < 3; r++) {
                 this.fillGridRow(r);
             }
@@ -459,50 +609,14 @@ class GameEngine {
 
     fillGridRow(row, isAttackRow = false) {
         for (let col = 0; col < this.maxCols; col++) {
-            const rand = Math.random();
-            let b = null;
-
-            if (isAttackRow) {
-                // In attack rows sent from opponent: 25% chance of obstacle bubble
-                if (rand < 0.25) {
-                    b = new Bubble(0, 0, 0, 'obstacle', row, col, this.bubbleRadius);
-                } else if (rand < 0.40) {
-                    const shields = [11, 13, 17, 19, 23, 29, 31];
-                    const p = MathUtil.randomChoice(shields);
-                    b = new Bubble(0, 0, p, 'prime_shield', row, col, this.bubbleRadius);
-                } else {
-                    const pool = [4, 6, 8, 9, 10, 12, 14, 15, 18, 20, 21, 24, 25, 27, 28, 30, 32, 35, 36, 40, 42, 45, 48, 50, 54, 60];
-                    const val = MathUtil.randomChoice(pool);
-                    b = new Bubble(0, 0, val, 'normal', row, col, this.bubbleRadius);
-                }
-            } else {
-                if (rand < 0.02) {
-                    b = new Bubble(0, 0, 0, 'item_bomb', row, col, this.bubbleRadius);
-                } else if (rand < 0.04) {
-                    b = new Bubble(0, 0, 0, 'item_clock', row, col, this.bubbleRadius);
-                } else if (rand < 0.06) {
-                    b = new Bubble(0, 0, 0, 'item_sieve', row, col, this.bubbleRadius);
-                } else if (rand < 0.08) {
-                    b = new Bubble(0, 0, 0, 'item_catalyst', row, col, this.bubbleRadius);
-                } else if (rand < 0.15) {
-                    // 7% chance for obstacle bubble in standard game
-                    b = new Bubble(0, 0, 0, 'obstacle', row, col, this.bubbleRadius);
-                } else if (rand < 0.25) {
-                    // Pure Prime Shield threat
-                    const shields = [11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97];
-                    const p = MathUtil.randomChoice(shields);
-                    b = new Bubble(0, 0, p, 'prime_shield', row, col, this.bubbleRadius);
-                } else {
-                    // Composites tailored to 2~97 primes
-                    const pool = [
-                        4, 6, 8, 9, 10, 12, 14, 15, 18, 20, 21, 22, 24, 25, 26, 27, 28, 30,
-                        33, 34, 35, 36, 38, 39, 42, 45, 46, 48, 49, 50, 51, 52, 54, 55, 57,
-                        58, 60, 62, 63, 65, 66, 68, 69, 70, 72, 74, 75, 77, 82, 85, 87, 91, 95
-                    ];
-                    const val = MathUtil.randomChoice(pool);
-                    b = new Bubble(0, 0, val, 'normal', row, col, this.bubbleRadius);
-                }
-            }
+            const b = this.modeMgr.createBubbleForGrid(
+                this.modeMgr.currentMode,
+                this.stage,
+                isAttackRow,
+                row,
+                col,
+                this.bubbleRadius
+            );
             this.grid[row][col] = b;
         }
     }
@@ -526,14 +640,12 @@ class GameEngine {
     }
 
     cycleAmmo(step = 1) {
-        if (this.modeMgr.currentMode === 'puzzle') return;
         const currIdx = this.allPrimes.indexOf(this.currentPrime);
         const nextIdx = (currIdx + step + this.allPrimes.length) % this.allPrimes.length;
         this.setAmmo(this.allPrimes[nextIdx]);
     }
 
     setAmmo(prime) {
-        if (this.modeMgr.currentMode === 'puzzle') return;
         this.currentPrime = prime;
         audio.playSwitch();
         this.updateHUD();
@@ -545,6 +657,10 @@ class GameEngine {
         let primeToShoot = this.currentPrime || 2;
         if (!primeToShoot) return;
         if (!isFinite(this.aimAngle)) this.aimAngle = -Math.PI / 2;
+
+        if (this.modeMgr.currentMode === 'blitz') {
+            this.blitzShotsFired++;
+        }
 
         const speed = 16;
         const vx = Math.cos(this.aimAngle) * speed;
@@ -582,7 +698,41 @@ class GameEngine {
             speedMultiplier = 0.45;
         }
 
-        // Update AI Controller in VS mode
+        // 1. Update Blitz Mode 60s Timer & Replenishment
+        if (this.modeMgr.currentMode === 'blitz' && !this.gameOver && !this.gameWon) {
+            this.blitzTimer = Math.max(0, this.blitzTimer - (1 / 60) * speedMultiplier);
+            const timerValEl = document.getElementById('blitz-timer-val');
+            if (timerValEl) {
+                timerValEl.innerText = this.blitzTimer.toFixed(1) + 's';
+                if (this.blitzTimer <= 10) {
+                    timerValEl.style.color = '#ff0055';
+                } else if (this.blitzTimer <= 20) {
+                    timerValEl.style.color = '#ffd700';
+                } else {
+                    timerValEl.style.color = '#00f0ff';
+                }
+            }
+
+            // Continuous replenishment: if active grid bubbles fall below 12, replenish top row
+            const activeCount = this.getAllGridBubbles().length;
+            if (activeCount < 12) {
+                for (let r = 0; r < 3; r++) {
+                    const rowCells = this.grid[r];
+                    if (rowCells && rowCells.some(cell => !cell || cell.dead)) {
+                        this.fillGridRow(r);
+                        this.updateSmartPrimes();
+                        break;
+                    }
+                }
+            }
+
+            if (this.blitzTimer <= 0) {
+                this.triggerBlitzEnd();
+                return;
+            }
+        }
+
+        // 2. Update AI Controller in VS mode
         if (this.modeMgr.currentMode === 'vs' && this.aiController && !this.gameOver && !this.gameWon) {
             this.aiController.update(speedMultiplier);
 
@@ -626,7 +776,7 @@ class GameEngine {
             }
         }
 
-        // Honeycomb Grid Downward Advance
+        // Honeycomb Grid Downward Advance (Arcade Mode only)
         if (this.modeMgr.currentMode === 'arcade' && !this.gameOver && !this.gameWon) {
             this.gridOffsetY += this.gridAdvanceSpeed * speedMultiplier;
             const rowHeight = Physics.getRowHeight();
@@ -666,6 +816,10 @@ class GameEngine {
                                 this.modeMgr.vsAiWins = (this.modeMgr.vsAiWins || 0) + 1;
                                 this.updateVSScoreboard();
                                 this.triggerGameOver(`防線失守！CPU 贏得此回合！ (${this.modeMgr.vsPlayerWins} : ${this.modeMgr.vsAiWins})`);
+                            } else if (this.modeMgr.currentMode === 'blitz') {
+                                // In Blitz mode, pop frontline bubble touching danger line to prevent premature game over
+                                this.popBubble(b, false);
+                                this.removeGridBubble(b);
                             } else {
                                 this.triggerGameOver("泡泡推進突破警戒線！");
                             }
@@ -765,6 +919,7 @@ class GameEngine {
 
         // 1. Check Special Items
         if (bubble.type.startsWith('item_')) {
+            if (this.modeMgr.currentMode === 'blitz') this.blitzShotsHit++;
             this.activateItem(bubble);
             this.removeGridBubble(bubble);
             bullet.active = false;
@@ -775,6 +930,7 @@ class GameEngine {
         // 2. Pure Prime Shield
         if (bubble.type === 'prime_shield') {
             if (P === bubble.value) {
+                if (this.modeMgr.currentMode === 'blitz') this.blitzShotsHit++;
                 this.popBubble(bubble, true);
                 this.clearAdjacentObstacles(bubble);
                 this.removeGridBubble(bubble);
@@ -808,6 +964,7 @@ class GameEngine {
         const V = bubble.value;
 
         if (V % P === 0) {
+            if (this.modeMgr.currentMode === 'blitz') this.blitzShotsHit++;
             const Q = Math.floor(V / P);
             this.addCombo(bubble.x, bubble.y);
 
@@ -1036,7 +1193,7 @@ class GameEngine {
         if (this.modeMgr.currentMode === 'arcade') {
             const remaining = this.getAllGridBubbles();
             if (remaining.length === 0 && !this.advancingStage) {
-                this.advanceArcadeStage();
+                this.advanceArcadeStage(true); // Board clear bonus!
             }
         } else if (this.modeMgr.currentMode === 'vs') {
             const remaining = this.getAllGridBubbles();
@@ -1057,18 +1214,23 @@ class GameEngine {
         }
     }
 
-    advanceArcadeStage() {
+    advanceArcadeStage(isPerfect = false) {
+        if (this.advancingStage || this.gameOver) return;
         this.advancingStage = true;
         this.stage++;
+        this.stageBubblesPopped = 0;
+        this.stageTarget = 8 + this.stage * 3;
         audio.playResonance();
 
-        const bonus = 1000 * (this.stage - 1);
-        this.addScore(bonus, this.width / 2, this.height * 0.45, `STAGE ${this.stage - 1} CLEAR!`);
+        const baseBonus = 1500 * (this.stage - 1);
+        const bonus = isPerfect ? baseBonus + 2000 : baseBonus;
+        const bannerText = isPerfect ? `🎉 完美全消！STAGE ${this.stage - 1} CLEAR!` : `STAGE ${this.stage - 1} CLEAR!`;
+        this.addScore(bonus, this.width / 2, this.height * 0.45, bannerText);
 
         this.floatingTexts.push(new FloatingText(this.width / 2, this.height * 0.35, `🌟 第 ${this.stage} 關 START! 🌟`, '#00ff88', 28));
 
         // Speed increases slightly per stage
-        this.gridAdvanceSpeed = 0.06 + Math.min(0.08, this.stage * 0.01);
+        this.gridAdvanceSpeed = 0.05 + Math.min(0.08, this.stage * 0.012);
         this.gridOffsetY = 0;
 
         // Spawn 3 fresh rows for the new stage
@@ -1081,7 +1243,7 @@ class GameEngine {
 
         setTimeout(() => {
             this.advancingStage = false;
-        }, 1000);
+        }, 1200);
     }
 
     triggerGameOver(msg) {
@@ -1094,29 +1256,95 @@ class GameEngine {
         this.showModal("VICTORY!", msg, true);
     }
 
-    recordElimination(x, y, isShieldBreak = false, shieldVal = 0) {
-        if (this.modeMgr.currentMode !== 'vs' || this.gameOver || this.gameWon) return;
+    triggerBlitzEnd() {
+        this.gameOver = true;
+        audio.playPop();
 
-        if (isShieldBreak) {
-            // Only high-tier prime shields (>= 23) send a row to opponent
-            if (shieldVal >= 23) {
-                this.sendAttackFromPlayerToAI(1, `🛡️ 擊破高階質數盾 [${shieldVal}]`);
-                this.floatingTexts.push(new FloatingText(x, y - 35, `🛡️ 高階破盾！送出 +1 排！`, '#ffd700', 20));
-            } else {
-                this.floatingTexts.push(new FloatingText(x, y - 35, `🛡️ 破除質數盾 [${shieldVal}]！`, '#ffd700', 18));
+        const acc = this.blitzShotsFired > 0 ? Math.round((this.blitzShotsHit / this.blitzShotsFired) * 100) : 100;
+        let grade = 'C';
+        let gradeColor = '#94a3b8';
+        if (this.score >= 12000) {
+            grade = 'S';
+            gradeColor = '#ffd700';
+        } else if (this.score >= 7500) {
+            grade = 'A';
+            gradeColor = '#00ff88';
+        } else if (this.score >= 3500) {
+            grade = 'B';
+            gradeColor = '#00f0ff';
+        }
+
+        const statsHtml = `
+            <div class="stat-cell">
+                <span class="stat-cell-label">最終得分</span>
+                <span class="stat-cell-value" style="color: #ffd700;">${this.score}</span>
+            </div>
+            <div class="stat-cell">
+                <span class="stat-cell-label">作戰評級</span>
+                <span class="stat-cell-value" style="color: ${gradeColor};">${grade} 級</span>
+            </div>
+            <div class="stat-cell">
+                <span class="stat-cell-label">擊破泡泡</span>
+                <span class="stat-cell-value">${this.blitzBubblesPopped} 個</span>
+            </div>
+            <div class="stat-cell">
+                <span class="stat-cell-label">最高連擊</span>
+                <span class="stat-cell-value">x${this.blitzMaxCombo}</span>
+            </div>
+            <div class="stat-cell" style="grid-column: span 2;">
+                <span class="stat-cell-label">質因數命中率</span>
+                <span class="stat-cell-value" style="color: #00ff88;">${acc}% (${this.blitzShotsHit}/${this.blitzShotsFired})</span>
+            </div>
+        `;
+
+        this.showModal('⏱️ TIME UP!', `60 秒極速競速結束！作戰評級：${grade} 級`, true, statsHtml);
+    }
+
+    recordElimination(x, y, isShieldBreak = false, shieldVal = 0) {
+        if (this.gameOver || this.gameWon) return;
+
+        // Blitz Mode tracking
+        if (this.modeMgr.currentMode === 'blitz') {
+            this.blitzBubblesPopped++;
+            if (this.combo > this.blitzMaxCombo) {
+                this.blitzMaxCombo = this.combo;
             }
             return;
         }
 
-        this.clearCombo++;
-        this.clearComboTimer = 240; // 4s window
+        // Arcade Mode stage progression
+        if (this.modeMgr.currentMode === 'arcade') {
+            this.stageBubblesPopped++;
+            this.updateHUD();
+            if (this.stageBubblesPopped >= this.stageTarget && !this.advancingStage) {
+                this.advanceArcadeStage(false);
+            }
+            return;
+        }
 
-        if (this.clearCombo < 4) {
-            this.floatingTexts.push(new FloatingText(x, y - 35, `💥 連消進度 ${this.clearCombo}/4`, '#00f0ff', 18));
-        } else if (this.clearCombo === 4) {
-            this.sendAttackFromPlayerToAI(1, "💥 4連消達成！");
-            this.floatingTexts.push(new FloatingText(x, y - 35, `⚔️ 4連消！送出 +1 排！`, '#ff2a85', 22));
-            this.clearCombo = 0; // Reset streak so another 4 is required
+        // Versus Mode Attack Meter
+        if (this.modeMgr.currentMode === 'vs') {
+            if (isShieldBreak) {
+                // Only high-tier prime shields (>= 23) send a row to opponent
+                if (shieldVal >= 23) {
+                    this.sendAttackFromPlayerToAI(1, `🛡️ 擊破高階質數盾 [${shieldVal}]`);
+                    this.floatingTexts.push(new FloatingText(x, y - 35, `🛡️ 高階破盾！送出 +1 排！`, '#ffd700', 20));
+                } else {
+                    this.floatingTexts.push(new FloatingText(x, y - 35, `🛡️ 破除質數盾 [${shieldVal}]！`, '#ffd700', 18));
+                }
+                return;
+            }
+
+            this.clearCombo++;
+            this.clearComboTimer = 240; // 4s window
+
+            if (this.clearCombo < 4) {
+                this.floatingTexts.push(new FloatingText(x, y - 35, `💥 連消進度 ${this.clearCombo}/4`, '#00f0ff', 18));
+            } else if (this.clearCombo === 4) {
+                this.sendAttackFromPlayerToAI(1, "💥 4連消達成！");
+                this.floatingTexts.push(new FloatingText(x, y - 35, `⚔️ 4連消！送出 +1 排！`, '#ff2a85', 22));
+                this.clearCombo = 0;
+            }
         }
     }
 
@@ -1276,12 +1504,12 @@ class GameEngine {
         }
     }
 
-    showModal(title, msg, isWin) {
+    showModal(title, msg, isWin, extraStatsHtml = null) {
         const modal = document.getElementById('game-modal');
         const modalContent = modal.querySelector('.modal-content');
         const modalTitle = document.getElementById('modal-title');
         const modalMsg = document.getElementById('modal-message');
-        const nextBtn = document.getElementById('modal-btn-next');
+        const statsBox = document.getElementById('modal-stats-container');
         const toggleBtn = document.getElementById('modal-btn-toggle-view');
 
         modalTitle.innerText = title;
@@ -1294,6 +1522,16 @@ class GameEngine {
         }
         if (toggleBtn) toggleBtn.innerText = '👁️ 檢視盤面';
         modalMsg.innerText = msg;
+
+        if (statsBox) {
+            if (extraStatsHtml) {
+                statsBox.innerHTML = extraStatsHtml;
+                statsBox.style.display = 'grid';
+            } else {
+                statsBox.innerHTML = '';
+                statsBox.style.display = 'none';
+            }
+        }
 
         modal.style.display = 'flex';
         modal.classList.add('active');
@@ -1323,6 +1561,21 @@ class GameEngine {
         const comboEl = document.getElementById('combo-val');
         if (comboEl) comboEl.innerText = `x${this.combo}`;
 
+        // Update Arcade Stage Target Progress Bar
+        const stageProgressVal = document.getElementById('stage-progress-val');
+        const stageProgressBar = document.getElementById('stage-progress-bar');
+        if (stageProgressVal && stageProgressBar) {
+            stageProgressVal.innerText = `${this.stageBubblesPopped || 0} / ${this.stageTarget || 8}`;
+            const pct = Math.min(100, Math.round(((this.stageBubblesPopped || 0) / (this.stageTarget || 8)) * 100));
+            stageProgressBar.style.width = `${pct}%`;
+        }
+
+        // Update Blitz Timer
+        const blitzTimerVal = document.getElementById('blitz-timer-val');
+        if (blitzTimerVal && this.modeMgr.currentMode === 'blitz') {
+            blitzTimerVal.innerText = this.blitzTimer.toFixed(1) + 's';
+        }
+
         // Highlight active button in full palette and scroll into view
         document.querySelectorAll('.prime-pill-btn').forEach(btn => {
             const p = parseInt(btn.dataset.prime, 10);
@@ -1333,8 +1586,6 @@ class GameEngine {
                 btn.classList.remove('active');
             }
         });
-
-
     }
 
     render() {
@@ -1524,5 +1775,6 @@ class GameEngine {
 window.addEventListener('DOMContentLoaded', () => {
     const game = new GameEngine();
     game.startMode('arcade');
+    game.showModeSelectModal();
     game.loop();
 });

@@ -55,9 +55,62 @@
                 <div class="modal-content">
                     <h2 id="modal-title" class="modal-title">GAME OVER</h2>
                     <p id="modal-message" class="modal-message">防線遭到突破！</p>
+                    <div id="modal-stats-container" class="modal-extra-stats" style="display: none;"></div>
                     <div class="modal-actions">
                         <button id="modal-btn-retry" class="btn-modal btn-modal-primary">再次挑戰</button>
+                        <button id="modal-btn-change-mode" class="btn-modal btn-modal-accent" title="返回模式選擇">🎮 選擇模式</button>
                         <button id="modal-btn-toggle-view" class="btn-modal btn-modal-secondary" title="收合此卡片以看清全盤泡泡">👁️ 檢視盤面</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Initial Mode Selection Welcome Modal -->
+            <div id="mode-select-modal" class="mode-select-overlay">
+                <div class="mode-select-modal-content">
+                    <div class="mode-select-header">
+                        <div class="cyber-badge-sub">PROTOCOL ACTIVATION</div>
+                        <h2 class="mode-select-title">PRIME SPLIT 質數裂變</h2>
+                        <p class="mode-select-desc">請選擇戰鬥防衛協議，發射 2~97 質數進行因數分解防衛！</p>
+                    </div>
+
+                    <div class="mode-cards-grid">
+                        <!-- Mode Card 1: Arcade Endless -->
+                        <div class="mode-card" data-mode="arcade">
+                            <div class="mode-card-badge">SURVIVAL</div>
+                            <div class="mode-card-icon">🛡️</div>
+                            <h3 class="mode-card-title">無盡防守模式</h3>
+                            <p class="mode-card-info">蜂巢逐步逼近防線，逐關提升合數難度與特殊道具，達成關卡目標或全清盤面即可突破晉級！</p>
+                            <button type="button" class="btn-mode-card">啟動無盡防守</button>
+                        </div>
+
+                        <!-- Mode Card 2: Blitz 60s -->
+                        <div class="mode-card featured" data-mode="blitz">
+                            <div class="mode-card-badge">TIME ATTACK</div>
+                            <div class="mode-card-icon">⏱️</div>
+                            <h3 class="mode-card-title">60秒極限競速</h3>
+                            <p class="mode-card-info">60 秒極速倒數狂潮！泡泡無限即時補給，高倍率連鎖裂變，考驗心算手速極限，衝擊歷史最高分！</p>
+                            <button type="button" class="btn-mode-card btn-glow">進入 60s 競速</button>
+                        </div>
+
+                        <!-- Mode Card 3: Versus AI Duel -->
+                        <div class="mode-card" data-mode="vs">
+                            <div class="mode-card-badge">VS DUEL</div>
+                            <div class="mode-card-icon">🤖</div>
+                            <h3 class="mode-card-title">對戰模式 (VS AI)</h3>
+                            <p class="mode-card-info">雙向即時對抗！因數分解連擊與全清將向對手戰場壓制生成干擾泡泡！擊潰 CPU 防衛線贏得勝利。</p>
+                            
+                            <!-- AI Difficulty Chooser inside Card -->
+                            <div class="card-difficulty-select" onclick="event.stopPropagation();">
+                                <span class="card-diff-title">AI 難度等級：</span>
+                                <div class="diff-btn-group modal-diff-group">
+                                    <button type="button" class="diff-btn" data-diff="easy">🟢 簡單 (65%)</button>
+                                    <button type="button" class="diff-btn active" data-diff="normal">🟡 普通 (85%)</button>
+                                    <button type="button" class="diff-btn" data-diff="hard">🔴 困難 (98%)</button>
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn-mode-card">啟動 AI 對戰</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -75,7 +128,8 @@
 
             <!-- Utility Buttons -->
             <div class="header-actions">
-                <button id="btn-audio" class="btn-cyber" title="開關音效">🔊 音效</button>
+                <button id="btn-choose-mode" class="btn-cyber" title="開啟模式選擇選單">🎮 模式</button>
+                <button id="btn-audio" class="btn-cyber" title="開關背景音樂與音效">🔊 音樂開</button>
                 <button id="btn-restart" class="btn-cyber" title="重新開始本關">🔄 重開</button>
             </div>
         </header>
@@ -84,18 +138,33 @@
         <div class="dashboard-block">
             <span class="dashboard-block-title">遊戲模式選擇</span>
             <nav class="mode-tabs" aria-label="Game Modes">
-                <button class="mode-tab active" data-mode="arcade">無盡防守</button>
-                <button class="mode-tab" data-mode="vs">對戰模式 (VS AI)</button>
+                <button class="mode-tab active" data-mode="arcade">🛡️ 無盡防守</button>
+                <button class="mode-tab" data-mode="blitz">⏱️ 60秒競速</button>
+                <button class="mode-tab" data-mode="vs">🤖 對戰 (VS)</button>
             </nav>
+        </div>
+
+        <!-- VS AI Difficulty Panel (Only visible in VS Mode) -->
+        <div id="vs-difficulty-panel" class="dashboard-block" style="display: none;">
+            <span class="dashboard-block-title">🤖 AI 演算核心難度</span>
+            <div class="diff-btn-group sidebar-diff-group">
+                <button type="button" class="diff-btn" data-diff="easy" title="正確率 65% · 思考延遲 1.5s">🟢 簡單</button>
+                <button type="button" class="diff-btn active" data-diff="normal" title="正確率 85% · 思考延遲 1.1s">🟡 普通</button>
+                <button type="button" class="diff-btn" data-diff="hard" title="正確率 98% · 思考延遲 0.7s">🔴 困難</button>
+            </div>
         </div>
 
         <!-- Stats Bar (2x2 Grid) -->
         <div class="dashboard-block">
             <span class="dashboard-block-title">即時戰況數據</span>
             <section class="stats-bar">
-                <div class="stat-item">
+                <div id="stage-stat-item" class="stat-item">
                     <span class="stat-label">STAGE 關卡</span>
                     <span id="stage-val" class="stat-value" style="color: #00ff88;">1</span>
+                </div>
+                <div id="blitz-timer-stat-item" class="stat-item" style="display: none;">
+                    <span class="stat-label">TIMER 剩餘時間</span>
+                    <span id="blitz-timer-val" class="stat-value" style="color: #00f0ff;">60.0s</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-label">SCORE 當前積分</span>
@@ -110,6 +179,17 @@
                     <span id="combo-val" class="stat-value">x0</span>
                 </div>
             </section>
+
+            <!-- Arcade Mode: Stage Target Progress Box -->
+            <div id="stage-progress-box" class="stage-progress-box">
+                <div class="stage-progress-label">
+                    <span>關卡目標突破進度</span>
+                    <span id="stage-progress-val">0 / 8</span>
+                </div>
+                <div class="stage-progress-track">
+                    <div id="stage-progress-bar" class="stage-progress-fill" style="width: 0%;"></div>
+                </div>
+            </div>
         </div>
 
     </aside>

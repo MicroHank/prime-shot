@@ -20,22 +20,14 @@ export class AIController {
         this.maxCols = 5;
 
         // =========================================================================
-        // 🎯 AI 電腦數值與行為設定 (可直接在此微調難度與手感)
+        // 🎯 AI 電腦數值與行為設定 (支援 簡單 / 普通 / 困難 三種難度)
         // =========================================================================
-        // 1. 命中與質因數計算正確率 (0.0 ~ 1.0):
-        //    1.0  = 100% 絕對正確（神級 AI：必定命中且必定挑選能整除消除的正確質因數）
-        //    0.95 = 95% 正確，5% 輕微失誤
-        //    0.85 = 85% 正確，15% 失誤 (舊版預設)
-        //    0.60 = 60% 正確 (休閒新手難度)
-        this.accuracy = 1.0;
-
-        // 2. 攻擊間隔緩衝 (毫秒):
-        //    限制 AI 發送攻擊給對手之最短冷卻 (目前設定: 2000ms = 2 秒內最多發動一次)
+        this.difficulty = 'normal'; // 'easy' | 'normal' | 'hard'
+        this.accuracy = 0.85;
         this.attackCooldownMs = 2000;
-
-        // 3. 思考與射擊節奏 (幀數，60幀約1秒):
-        this.minThinkDelay = 80;  // 最小射擊間隔 (~1.3 秒)
-        this.maxThinkDelay = 120; // 最大射擊間隔 (~2.0 秒)
+        this.minThinkDelay = 70;
+        this.maxThinkDelay = 100;
+        this.setDifficulty('normal');
         // =========================================================================
 
         this.grid = [];
@@ -66,13 +58,43 @@ export class AIController {
         this.onAttackOpponent = (count, reason) => { };
         this.onLose = () => { };
 
-        // 方便於瀏覽器控制台 (F12) 隨時動態測試調整 AI 正確率
+        // 方便於瀏覽器控制台 (F12) 隨時動態測試調整 AI 正確率與難度
         if (typeof window !== 'undefined') {
             window.aiController = this;
             window.setAIAccuracy = (val) => {
                 this.setAccuracy(val);
                 console.log(`%c[AI 設定] 命中正確率已調整為: ${(this.accuracy * 100).toFixed(0)}%`, 'color: #00f0ff; font-weight: bold;');
             };
+            window.setAIDifficulty = (level) => {
+                this.setDifficulty(level);
+                console.log(`%c[AI 設定] 難度已設為: ${this.difficulty} (正確率: ${(this.accuracy * 100).toFixed(0)}%)`, 'color: #ffd700; font-weight: bold;');
+            };
+        }
+    }
+
+    setDifficulty(level) {
+        this.difficulty = level || 'normal';
+        switch (this.difficulty) {
+            case 'easy':
+                this.accuracy = 0.65;
+                this.minThinkDelay = 90;  // ~1.5s
+                this.maxThinkDelay = 140; // ~2.3s
+                this.attackCooldownMs = 2500;
+                break;
+            case 'hard':
+                this.accuracy = 0.98;
+                this.minThinkDelay = 45;  // ~0.75s
+                this.maxThinkDelay = 70;  // ~1.15s
+                this.attackCooldownMs = 1500;
+                break;
+            case 'normal':
+            default:
+                this.difficulty = 'normal';
+                this.accuracy = 0.85;
+                this.minThinkDelay = 70;  // ~1.1s
+                this.maxThinkDelay = 100; // ~1.6s
+                this.attackCooldownMs = 2000;
+                break;
         }
     }
 
@@ -396,6 +418,9 @@ export class AIController {
             // Snap aimAngle to planned angle upon firing to guarantee pinpoint precision
             if (bestAimAngle !== null) {
                 this.aimAngle = bestAimAngle;
+                if (this.difficulty === 'easy' && Math.random() > this.accuracy) {
+                    this.aimAngle += (Math.random() - 0.5) * 0.08;
+                }
             }
 
             // Decide which prime to shoot for the ACTUAL bubble that will be hit!

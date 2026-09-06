@@ -167,6 +167,80 @@ export class AIController {
         }
     }
 
+    isLineBlockedByObstacle(startX, startY, targetX, targetY, obstacles, toleranceMargin = 4) {
+        if (!obstacles || obstacles.length === 0) return false;
+        const dx = targetX - startX;
+        const dy = targetY - startY;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) return false;
+
+        const bulletRadius = 14;
+
+        for (const obs of obstacles) {
+            if (obs.dead || obs.isFalling) continue;
+
+            const ox = obs.x - startX;
+            const oy = obs.y - startY;
+            const t = (ox * dx + oy * dy) / lenSq;
+
+            // Only check obstacles strictly between shooter and target
+            if (t > 0.06 && t < 0.94) {
+                const projX = startX + t * dx;
+                const projY = startY + t * dy;
+                const distSq = (obs.x - projX) * (obs.x - projX) + (obs.y - projY) * (obs.y - projY);
+                const collideDist = (obs.radius || this.bubbleRadius || 31) + bulletRadius + toleranceMargin;
+                if (distSq <= collideDist * collideDist) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    findClearBounceAngle(target, obstacles) {
+        const bulletRadius = 14;
+        const wallMargin = bulletRadius;
+
+        // 1. Try Left Wall Bounce (mirrored virtual target)
+        const leftVirtualX = 2 * wallMargin - target.x;
+        const leftDx = leftVirtualX - this.turretX;
+        const leftDy = target.y - this.turretY;
+        const leftAngle = Math.atan2(Math.min(leftDy, -15), leftDx);
+
+        if (Math.cos(leftAngle) < -0.01) {
+            const tWall = (wallMargin - this.turretX) / Math.cos(leftAngle);
+            if (tWall > 0) {
+                const wallHitY = this.turretY + tWall * Math.sin(leftAngle);
+                const seg1Blocked = this.isLineBlockedByObstacle(this.turretX, this.turretY, wallMargin, wallHitY, obstacles);
+                const seg2Blocked = this.isLineBlockedByObstacle(wallMargin, wallHitY, target.x, target.y, obstacles);
+                if (!seg1Blocked && !seg2Blocked && wallHitY > target.y && wallHitY < this.turretY) {
+                    return leftAngle;
+                }
+            }
+        }
+
+        // 2. Try Right Wall Bounce (mirrored virtual target)
+        const rightWallX = this.width - wallMargin;
+        const rightVirtualX = 2 * rightWallX - target.x;
+        const rightDx = rightVirtualX - this.turretX;
+        const rightDy = target.y - this.turretY;
+        const rightAngle = Math.atan2(Math.min(rightDy, -15), rightDx);
+
+        if (Math.cos(rightAngle) > 0.01) {
+            const tWall = (rightWallX - this.turretX) / Math.cos(rightAngle);
+            if (tWall > 0) {
+                const wallHitY = this.turretY + tWall * Math.sin(rightAngle);
+                const seg1Blocked = this.isLineBlockedByObstacle(this.turretX, this.turretY, rightWallX, wallHitY, obstacles);
+                const seg2Blocked = this.isLineBlockedByObstacle(rightWallX, wallHitY, target.x, target.y, obstacles);
+                if (!seg1Blocked && !seg2Blocked && wallHitY > target.y && wallHitY < this.turretY) {
+                    return rightAngle;
+                }
+            }
+        }
+
+        return null;
+    }
+
     think(speedMultiplier = 1.0) {
         if (this.gameOver) return;
 
@@ -180,45 +254,142 @@ export class AIController {
             return;
         }
 
-        // 1. Find lowest (most threatening) bubble
-        let lowestBubble = allBubbles[0];
+        // Filter out obstacle bubbles completely - AI never intentionally targets obstacles
+        const nonObstacles = allBubbles.filter(b => b.type !== 'obstacle');
+        const obstacles = allBubbles.filter(b => b.type === 'obstacle');
+
+        // Edge case: entire board contains only obstacles
+        if (nonObstacles.length === 0) {
+            this.targetBubble = null;
+            this.aimAngle = -Math.PI * 0.25;
+            return;
+        }
+
+        // Find the lowest (frontmost) bubble in each column
+        const lowestInCol = new Map();
         for (const b of allBubbles) {
-            if (b.y > lowestBubble.y) {
-                lowestBubble = b;
+            const currentLowest = lowestInCol.get(b.col);
+            if (!currentLowest || b.row > currentLowest.row) {
+                lowestInCol.set(b.col, b);
             }
         }
-        this.targetBubble = lowestBubble;
 
-        // 2. Smoothly rotate turret towards target
-        if (this.targetBubble) {
+        // Score all non-obstacle bubbles to pick the best strategic target
+        let bestTarget = null;
+        let bestAimAngle = null;
+        let bestScore = -Infinity;
+
+        for (const b of nonObstacles) {
+            const isDirectBlocked = this.isLineBlockedByObstacle(this.turretX, this.turretY, b.x, b.y, obstacles);
+            let candidateAngle = null;
+            let pathClear = false;
+
+            if (!isDirectBlocked) {
+                const dx = b.x - this.turretX;
+                const dy = b.y - this.turretY;
+                candidateAngle = Math.atan2(Math.min(dy, -15), dx);
+                pathClear = true;
+            } else {
+                // If direct path is blocked by an obstacle, check if bank shot can bypass it
+                const bounceAngle = this.findClearBounceAngle(b, obstacles);
+                if (bounceAngle !== null) {
+                    candidateAngle = bounceAngle;
+                    pathClear = true;
+                }
+            }
+
+            let score = 0;
+
+            // 1. Threat priority: lower bubbles are closer to the danger line
+            score += (b.y / this.height) * 150;
+
+            // 2. Frontline bonus: lowest bubble in its column
+            if (lowestInCol.get(b.col) === b) {
+                score += 50;
+            }
+
+            // 3. Strategic obstacle detonation bonus:
+            // Eliminating bubbles adjacent to obstacles detonates those obstacles via clearAdjacentObstacles()!
+            const neighbors = Physics.getHexNeighbors(b.row, b.col, this.maxRows, this.maxCols);
+            let adjacentObstacles = 0;
+            for (const { r, c } of neighbors) {
+                const nb = this.grid[r]?.[c];
+                if (nb && !nb.dead && !nb.isFalling && nb.type === 'obstacle') {
+                    adjacentObstacles++;
+                }
+            }
+            if (adjacentObstacles > 0) {
+                score += adjacentObstacles * 80;
+            }
+
+            // 4. Quick elimination bonuses
+            if (b.type.startsWith('item_')) {
+                score += 50;
+            } else if (b.type === 'prime_shield') {
+                score += 30;
+            } else if (b.value > 1 && MathUtil.isPrime(b.value)) {
+                score += 40;
+            }
+
+            // 5. Obstacle avoidance penalty
+            if (pathClear) {
+                score += 100;
+            } else {
+                // Severe penalty if trajectory hits an obstacle
+                score -= 1000;
+                const dx = b.x - this.turretX;
+                const dy = b.y - this.turretY;
+                candidateAngle = Math.atan2(Math.min(dy, -15), dx);
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestTarget = b;
+                bestAimAngle = candidateAngle;
+            }
+        }
+
+        this.targetBubble = bestTarget || nonObstacles[0];
+
+        // Smoothly rotate turret towards the chosen target / aim angle
+        if (bestAimAngle !== null) {
+            this.aimAngle += (bestAimAngle - this.aimAngle) * 0.18;
+        } else if (this.targetBubble) {
             const dx = this.targetBubble.x - this.turretX;
             const dy = this.targetBubble.y - this.turretY;
             const desiredAngle = Math.atan2(Math.min(dy, -15), dx);
-            this.aimAngle += (desiredAngle - this.aimAngle) * 0.12;
+            this.aimAngle += (desiredAngle - this.aimAngle) * 0.18;
         }
 
-        // 3. Shoot cooldown management
+        // Shoot cooldown management
         this.thinkCooldown -= speedMultiplier;
         if (this.thinkCooldown <= 0) {
-            this.thinkCooldown = Math.floor(Math.random() * 40) + 100; // ~1.7s to 2.3s per shot (natural human pacing)
+            this.thinkCooldown = Math.floor(Math.random() * 40) + 100; // ~1.7s to 2.3s per shot
+
+            // Snap aimAngle to planned angle upon firing to avoid misfiring into obstacles
+            if (bestAimAngle !== null) {
+                this.aimAngle = bestAimAngle;
+            }
 
             // Decide which prime to shoot
             let primeToShoot = 2;
-            const V = this.targetBubble.value;
-
-            // 85% chance to pick optimal prime factor, 15% chance to blunder
+            const V = this.targetBubble ? this.targetBubble.value : 2;
             const isSmart = Math.random() < 0.85;
 
-            if (this.targetBubble.type === 'prime_shield') {
-                primeToShoot = isSmart ? V : (V === 2 ? 3 : 2);
-            } else if (V > 1) {
-                if (isSmart) {
-                    const factors = MathUtil.getPrimeFactors(V);
-                    primeToShoot = factors.length > 0 ? MathUtil.randomChoice(factors) : 2;
-                } else {
-                    // Blunder: shoot prime that doesn't divide V
-                    const wrongPrimes = ALL_PRIMES.filter(p => V % p !== 0);
-                    primeToShoot = wrongPrimes.length > 0 ? MathUtil.randomChoice(wrongPrimes.slice(0, 5)) : 5;
+            if (this.targetBubble) {
+                if (this.targetBubble.type === 'prime_shield') {
+                    primeToShoot = isSmart ? V : (V === 2 ? 3 : 2);
+                } else if (this.targetBubble.type.startsWith('item_')) {
+                    primeToShoot = MathUtil.randomChoice([2, 3, 5, 7]);
+                } else if (V > 1) {
+                    if (isSmart) {
+                        const factors = MathUtil.getPrimeFactors(V);
+                        primeToShoot = factors.length > 0 ? MathUtil.randomChoice(factors) : 2;
+                    } else {
+                        // Blunder: shoot prime that doesn't divide V
+                        const wrongPrimes = ALL_PRIMES.filter(p => V % p !== 0);
+                        primeToShoot = wrongPrimes.length > 0 ? MathUtil.randomChoice(wrongPrimes.slice(0, 5)) : 5;
+                    }
                 }
             }
 

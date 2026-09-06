@@ -63,6 +63,7 @@ class GameEngine {
         // Ammo Selection System (2 ~ 97)
         this.currentPrime = 2;
         this.allPrimes = ALL_PRIMES;
+        this.vsSuddenDeathTimer = 600; // 10s countdown (600 frames at 60 FPS)
 
         this.slowMoTimer = 0;
 
@@ -422,6 +423,7 @@ class GameEngine {
                 this.fillGridRow(r);
             }
             this.currentPrime = 2;
+            this.vsSuddenDeathTimer = 600;
 
             // Reset AI board
             if (this.aiController) {
@@ -583,6 +585,30 @@ class GameEngine {
         // Update AI Controller in VS mode
         if (this.modeMgr.currentMode === 'vs' && this.aiController && !this.gameOver && !this.gameWon) {
             this.aiController.update(speedMultiplier);
+
+            // Sudden Death Mechanism: Add 1 row to BOTH sides every 10 seconds (600 frames)
+            this.vsSuddenDeathTimer -= speedMultiplier;
+
+            // Update UI timer badge in the divider
+            const timerEl = document.getElementById('vs-sudden-death-timer');
+            if (timerEl) {
+                const remainingSec = Math.max(0, Math.ceil(this.vsSuddenDeathTimer / 60));
+                timerEl.innerText = `⏱️ ${remainingSec}s`;
+                if (remainingSec <= 3) {
+                    timerEl.style.color = '#ff0055';
+                    timerEl.style.borderColor = '#ff0055';
+                    timerEl.style.background = 'rgba(255, 0, 85, 0.2)';
+                } else {
+                    timerEl.style.color = '#ff9800';
+                    timerEl.style.borderColor = 'rgba(255, 152, 0, 0.4)';
+                    timerEl.style.background = 'rgba(255, 152, 0, 0.15)';
+                }
+            }
+
+            if (this.vsSuddenDeathTimer <= 0) {
+                this.vsSuddenDeathTimer = 600; // Reset to 10 seconds
+                this.triggerSuddenDeathWave();
+            }
         }
 
         if (this.comboTimer > 0) {
@@ -1119,6 +1145,31 @@ class GameEngine {
             alertEl.style.color = '#ff0055';
             clearTimeout(this._vsAlertTimeout);
             this._vsAlertTimeout = setTimeout(() => { if (alertEl) alertEl.innerText = ''; }, 3000);
+        }
+    }
+
+    triggerSuddenDeathWave() {
+        if (this.modeMgr.currentMode !== 'vs' || this.gameOver || this.gameWon) return;
+
+        audio.playFission();
+
+        // Push 1 row to Player
+        this.pushRowFromOpponent(1);
+
+        // Push 1 row to Computer (AI)
+        if (this.aiController && !this.aiController.gameOver) {
+            this.aiController.pushRowFromOpponent(1);
+        }
+
+        // Energetic visual and center HUD alerts
+        this.floatingTexts.push(new FloatingText(this.width / 2, this.height * 0.42, '⏱️ 驟死壓迫！雙方 +1 排！', '#ff9800', 22));
+
+        const alertEl = document.getElementById('vs-attack-msg');
+        if (alertEl) {
+            alertEl.innerText = '⏱️ 驟死壓迫！雙方 +1 排！';
+            alertEl.style.color = '#ff9800';
+            clearTimeout(this._vsAlertTimeout);
+            this._vsAlertTimeout = setTimeout(() => { if (alertEl) alertEl.innerText = ''; }, 2500);
         }
     }
 

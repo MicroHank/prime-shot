@@ -13,7 +13,7 @@ class SoundFX {
         this.bgmStep = 0;
         this.bgmPlaying = false;
         this.nextNoteTime = 0;
-        this.baseBgmVolume = 1;
+        this.baseBgmVolume = 0.7; // Balanced so elimination SFX cuts through clearly
         this.initialized = false;
         this.bgmAudio = null;
         this.useProceduralBGM = false;
@@ -49,7 +49,7 @@ class SoundFX {
             this.ctx = new AudioContext();
 
             this.sfxGain = this.ctx.createGain();
-            this.sfxGain.gain.value = 0.4;
+            this.sfxGain.gain.value = 0.85; // Master SFX volume boosted from 0.4 to 0.85
             this.sfxGain.connect(this.ctx.destination);
 
             this.bgmGain = this.ctx.createGain();
@@ -80,7 +80,7 @@ class SoundFX {
         const now = this.ctx ? this.ctx.currentTime : 0;
         if (this.sfxGain && this.ctx) {
             this.sfxGain.gain.cancelScheduledValues(now);
-            this.sfxGain.gain.setValueAtTime(this.muted ? 0 : 0.4, now);
+            this.sfxGain.gain.setValueAtTime(this.muted ? 0 : 0.85, now);
         }
         if (this.bgmGain && this.ctx) {
             this.bgmGain.gain.cancelScheduledValues(now);
@@ -129,36 +129,66 @@ class SoundFX {
         osc.stop(this.ctx.currentTime + 0.13);
     }
 
-    // Fission split sound (juicy pop)
+    // Fission split sound (juicy factor division pop)
     playFission(depth = 1) {
         if (!this.initialized || this.muted) return;
         this.resume();
 
+        const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
         osc.type = 'sine';
-        const startFreq = 400 + depth * 80;
-        osc.frequency.setValueAtTime(startFreq, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(startFreq * 1.8, this.ctx.currentTime + 0.08);
+        const startFreq = 420 + depth * 85;
+        osc.frequency.setValueAtTime(startFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(startFreq * 2.2, now + 0.1);
 
-        gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+        // Boosted gain for clear, impactful division punch
+        gain.gain.setValueAtTime(0.7, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
         osc.connect(gain);
         gain.connect(this.sfxGain);
 
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.12);
+        osc.start(now);
+        osc.stop(now + 0.16);
+
+        // Sub-harmonic snap for punchy tactile feedback
+        const sub = this.ctx.createOscillator();
+        const subGain = this.ctx.createGain();
+        sub.type = 'triangle';
+        sub.frequency.setValueAtTime(startFreq * 0.5, now);
+        sub.frequency.exponentialRampToValueAtTime(startFreq * 1.1, now + 0.08);
+        subGain.gain.setValueAtTime(0.5, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+        sub.connect(subGain);
+        subGain.connect(this.sfxGain);
+        sub.start(now);
+        sub.stop(now + 0.1);
     }
 
-    // Shatter into coins/crystals when bubble reaches 1
+    // Shatter into coins/crystals when bubble reaches 1 / cleared
     playPop() {
         if (!this.initialized || this.muted) return;
         this.resume();
 
-        // High pleasant arpeggio pop
-        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        const now = this.ctx.currentTime;
+
+        // 1. Loud punchy bubble pop transient (sharp downward pitch slide)
+        const popOsc = this.ctx.createOscillator();
+        const popGain = this.ctx.createGain();
+        popOsc.type = 'sine';
+        popOsc.frequency.setValueAtTime(950, now);
+        popOsc.frequency.exponentialRampToValueAtTime(140, now + 0.08);
+        popGain.gain.setValueAtTime(0.8, now);
+        popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+        popOsc.connect(popGain);
+        popGain.connect(this.sfxGain);
+        popOsc.start(now);
+        popOsc.stop(now + 0.1);
+
+        // 2. High pleasant arpeggio crystal chime (C5, E5, G5, C6) - Louder & sparkling
+        const notes = [523.25, 659.25, 783.99, 1046.50];
         notes.forEach((freq, idx) => {
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
@@ -166,15 +196,15 @@ class SoundFX {
             osc.type = 'triangle';
             osc.frequency.value = freq;
 
-            const startTime = this.ctx.currentTime + idx * 0.035;
-            gain.gain.setValueAtTime(0.25, startTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.18);
+            const startTime = now + idx * 0.032;
+            gain.gain.setValueAtTime(0.5, startTime); // boosted from 0.25
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.22);
 
             osc.connect(gain);
             gain.connect(this.sfxGain);
 
             osc.start(startTime);
-            osc.stop(startTime + 0.2);
+            osc.stop(startTime + 0.24);
         });
     }
 
@@ -187,10 +217,10 @@ class SoundFX {
         const gain = this.ctx.createGain();
 
         osc.type = 'square';
-        osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.15);
 
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.32, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
 
         osc.connect(gain);
@@ -209,18 +239,18 @@ class SoundFX {
         const gain = this.ctx.createGain();
 
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(300, this.ctx.currentTime + 0.25);
+        osc.frequency.setValueAtTime(900, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(320, this.ctx.currentTime + 0.26);
 
-        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.28);
+        gain.gain.setValueAtTime(0.65, this.ctx.currentTime); // boosted from 0.3
+        gain.gain.exponentialRampToValueAtTime(0.005, this.ctx.currentTime + 0.3);
 
         // Add high filter crackle
         osc.connect(gain);
         gain.connect(this.sfxGain);
 
         osc.start();
-        osc.stop(this.ctx.currentTime + 0.3);
+        osc.stop(this.ctx.currentTime + 0.32);
     }
 
     // Bomb detonation
@@ -245,8 +275,8 @@ class SoundFX {
         filter.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.45);
 
         const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.85, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.52);
 
         noise.connect(filter);
         filter.connect(gain);

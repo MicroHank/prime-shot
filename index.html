@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>質數裂變：因數分解防衛戰 (Prime Split: Factorization Protocol)</title>
+    <meta name="description" content="2D 質數蜂巢陣列射擊遊戲。發射 2~97 質數子彈進行因數分解、裂變彈跳、物理連鎖與公因數超導共鳴！">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="game-container-layout">
+    <!-- Left Sidebar: Prime Selection Palette (2 ~ 97) with Q / W navigation -->
+    <aside class="prime-sidebar">
+        <div class="sidebar-header">
+            <h3>⚡ 質數庫 (2~97)</h3>
+            <div class="sidebar-nav-hint">
+                <span><kbd>Q</kbd> ◄ 上一個</span>
+                <span><kbd>W</kbd> 下一個 ►</span>
+            </div>
+        </div>
+        <div id="prime-dock-tiers" class="sidebar-prime-list"></div>
+    </aside>
+
+    <!-- Center Main Game Area (Elevated directly to the top!) -->
+    <div class="game-main-area">
+        <!-- Canvas Play Area (Dual Arena in Versus Mode) -->
+        <main id="canvas-container">
+            <!-- Dedicated Top Status Bar: Keeps tags cleanly at Left and Right, off the bubble field! -->
+            <div id="game-arena-top-bar" class="game-arena-top-bar">
+                <div id="player-arena-tag" class="arena-tag player-tag">🧑‍🚀 玩家戰場</div>
+                <div id="top-bar-vs-badge" class="top-vs-badge" style="display: none;">VS</div>
+                <div id="ai-arena-tag" class="arena-tag ai-tag" style="display: none;">
+                    🤖 電腦 CPU <span id="ai-hud-status" class="ai-hud-status"></span>
+                </div>
+            </div>
+
+            <div class="arena-wrapper">
+                <!-- Player Arena -->
+                <div id="player-arena-box" class="arena-box player">
+                    <canvas id="gameCanvas"></canvas>
+                </div>
+
+                <!-- Versus Divider & Real-time Combat Meter -->
+                <div id="vs-arena-divider" class="vs-divider" style="display: none;">
+                    <div class="vs-badge">VS</div>
+                    <div id="vs-round-score" class="vs-score">0 : 0</div>
+                    <div id="vs-attack-msg" class="vs-alert"></div>
+                </div>
+
+                <!-- Computer AI Arena -->
+                <div id="ai-arena-box" class="arena-box ai" style="display: none;">
+                    <canvas id="aiCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Game Result Card (No Dark Mask, Full Battlefield Visibility) -->
+            <div id="game-modal" class="game-modal">
+                <div class="modal-content">
+                    <h2 id="modal-title" class="modal-title">GAME OVER</h2>
+                    <p id="modal-message" class="modal-message">防線遭到突破！</p>
+                    <div class="modal-actions">
+                        <button id="modal-btn-retry" class="btn-modal btn-modal-primary">再次挑戰</button>
+                        <button id="modal-btn-toggle-view" class="btn-modal btn-modal-secondary" title="收合此卡片以看清全盤泡泡">👁️ 檢視盤面</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Controls & Ammo Dock -->
+        <footer class="control-dock">
+            <div class="dock-header-row">
+                <!-- Current & Next Ammo Preview -->
+                <div class="ammo-preview-box">
+                    <div class="preview-unit">
+                        <span class="preview-label">當前發射</span>
+                        <div id="hud-current-ammo" class="ammo-orb">2</div>
+                    </div>
+                    <div class="preview-unit">
+                        <span class="preview-label">下一發</span>
+                        <div id="hud-next-ammo" class="ammo-orb next">3</div>
+                    </div>
+                </div>
+
+                <!-- Operation Hints -->
+                <div class="control-hints">
+                    <span><kbd>Q</kbd> 上一個質數</span>
+                    <span><kbd>W</kbd> 下一個質數</span>
+                    <span><kbd>1~4</kbd> 主力快捷 (2, 3, 5, 7)</span>
+                    <span><kbd>左鍵</kbd> 發射</span>
+                    <span><kbd>E</kbd> 飛彈大招</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Right Sidebar: Title, Mode Selection & Real-time Stats Dashboard -->
+    <aside class="game-dashboard-sidebar">
+        <!-- Header & Title -->
+        <header class="game-header">
+            <div class="brand-title">
+                <h1>PRIME SPLIT</h1>
+                <span class="badge-prime">因數分解防衛戰</span>
+            </div>
+
+            <!-- Utility Buttons -->
+            <div class="header-actions">
+                <button id="btn-audio" class="btn-cyber" title="開關音效">🔊 音效</button>
+                <button id="btn-restart" class="btn-cyber" title="重新開始本關">🔄 重開</button>
+            </div>
+        </header>
+
+        <!-- Mode Select Tabs -->
+        <div class="dashboard-block">
+            <span class="dashboard-block-title">遊戲模式選擇</span>
+            <nav class="mode-tabs" aria-label="Game Modes">
+                <button class="mode-tab active" data-mode="arcade">無盡防守</button>
+                <button class="mode-tab" data-mode="vs">對戰模式 (VS AI)</button>
+            </nav>
+        </div>
+
+        <!-- Stats Bar (2x2 Grid) -->
+        <div class="dashboard-block">
+            <span class="dashboard-block-title">即時戰況數據</span>
+            <section class="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-label">STAGE 關卡</span>
+                    <span id="stage-val" class="stat-value" style="color: #00ff88;">1</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">SCORE 當前積分</span>
+                    <span id="score-val" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">HIGH 歷史最高</span>
+                    <span id="high-score-val" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">COMBO 連擊</span>
+                    <span id="combo-val" class="stat-value">x0</span>
+                </div>
+            </section>
+        </div>
+
+        <!-- Ultimate Gauge -->
+        <div class="dashboard-block">
+            <span class="dashboard-block-title">飛彈大招能量 (按 E)</span>
+            <div class="skill-bar-container">
+                <div class="skill-track">
+                    <div id="skill-gauge-fill" class="skill-fill"></div>
+                </div>
+                <button id="btn-ultimate" class="btn-ult" title="集滿後按 E 或點擊施放飛彈">蓄能: 0%</button>
+            </div>
+        </div>
+
+        <!-- Strategy Guide Drawer -->
+        <section class="guide-card">
+            <div class="guide-header" onclick="document.querySelector('.guide-body').classList.toggle('active')">
+                <span>📖 戰術指南 (點擊展開)</span>
+                <span>▼</span>
+            </div>
+            <div class="guide-body">
+                <div class="guide-item">
+                    <h4>🧱 阻礙泡泡機制</h4>
+                    <p>阻礙泡泡無法直接分解！必須透過消除其<b>「相鄰相連的泡泡」</b>才能連鎖粉碎，或切斷支撐使其崩落！</p>
+                </div>
+                <div class="guide-item">
+                    <h4>🚀 飛彈大招 (按 E)</h4>
+                    <p>朝瞄準方向發射重型火箭飛彈，<b>直接炸毀命中的泡泡與障礙</b>，並波及周圍！</p>
+                </div>
+                <div class="guide-item">
+                    <h4>⚠️ 不可整除的加乘懲罰</h4>
+                    <p>若拿無法整除的質數射擊（如拿 5 打 14），該質數將直接加至泡泡數字上（14 變為 19）！</p>
+                </div>
+                <div class="guide-item">
+                    <h4>🎯 質數庫 (Q / W 換彈)</h4>
+                    <p>左側提供 2~97 完整質數庫；按 <b>Q 鍵上一個質數</b>，按 <b>W 鍵下一個質數</b>！</p>
+                </div>
+                <div class="guide-item">
+                    <h4>⚡ 公因數超導共鳴</h4>
+                    <p>命中場上某因數時，場上所有共享該因數的泡泡將被<b>電弧連鎖同步整除</b>！</p>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>
+
+<!-- Game Scripts (ES Modules) -->
+<script type="module" src="js/game.js"></script>
+
+</body>
+</html>

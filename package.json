@@ -1,0 +1,18 @@
+{
+  "name": "prime-split-shooter",
+  "version": "1.0.0",
+  "description": "2D Prime Split Bubble Shooter Game",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/verify_math.mjs"
+  },
+  "keywords": [
+    "game",
+    "canvas",
+    "prime-factorization",
+    "arcade"
+  ],
+  "author": "",
+  "license": "MIT"
+}

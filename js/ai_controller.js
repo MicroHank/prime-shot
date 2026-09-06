@@ -19,6 +19,25 @@ export class AIController {
         this.maxRows = 14;
         this.maxCols = 5;
 
+        // =========================================================================
+        // 🎯 AI 電腦數值與行為設定 (可直接在此微調難度與手感)
+        // =========================================================================
+        // 1. 命中與質因數計算正確率 (0.0 ~ 1.0):
+        //    1.0  = 100% 絕對正確（神級 AI：必定命中且必定挑選能整除消除的正確質因數）
+        //    0.95 = 95% 正確，5% 輕微失誤
+        //    0.85 = 85% 正確，15% 失誤 (舊版預設)
+        //    0.60 = 60% 正確 (休閒新手難度)
+        this.accuracy = 1.0;
+
+        // 2. 攻擊間隔緩衝 (毫秒):
+        //    限制 AI 發送攻擊給對手之最短冷卻 (目前設定: 2000ms = 2 秒內最多發動一次)
+        this.attackCooldownMs = 2000;
+
+        // 3. 思考與射擊節奏 (幀數，60幀約1秒):
+        this.minThinkDelay = 80;  // 最小射擊間隔 (~1.3 秒)
+        this.maxThinkDelay = 120; // 最大射擊間隔 (~2.0 秒)
+        // =========================================================================
+
         this.grid = [];
         this.bullets = [];
         this.particles = [];
@@ -44,8 +63,21 @@ export class AIController {
         this.gameOver = false;
 
         // Attack callbacks
-        this.onAttackOpponent = (count, reason) => {};
-        this.onLose = () => {};
+        this.onAttackOpponent = (count, reason) => { };
+        this.onLose = () => { };
+
+        // 方便於瀏覽器控制台 (F12) 隨時動態測試調整 AI 正確率
+        if (typeof window !== 'undefined') {
+            window.aiController = this;
+            window.setAIAccuracy = (val) => {
+                this.setAccuracy(val);
+                console.log(`%c[AI 設定] 命中正確率已調整為: ${(this.accuracy * 100).toFixed(0)}%`, 'color: #00f0ff; font-weight: bold;');
+            };
+        }
+    }
+
+    setAccuracy(val) {
+        this.accuracy = Math.max(0, Math.min(1.0, Number(val) || 0));
     }
 
     setSize(width, height) {
@@ -167,78 +199,63 @@ export class AIController {
         }
     }
 
-    isLineBlockedByObstacle(startX, startY, targetX, targetY, obstacles, toleranceMargin = 4) {
-        if (!obstacles || obstacles.length === 0) return false;
-        const dx = targetX - startX;
-        const dy = targetY - startY;
-        const lenSq = dx * dx + dy * dy;
-        if (lenSq === 0) return false;
+    getFirstBubbleAlongRay(startX, startY, angle, bubbles) {
+        if (!bubbles || bubbles.length === 0) return null;
 
         const bulletRadius = 14;
+        const segments = Physics.calculateAimTrajectory(startX, startY, angle, this.width, this.height, 1, 900);
+        if (!segments || segments.length < 2) return null;
 
-        for (const obs of obstacles) {
-            if (obs.dead || obs.isFalling) continue;
+        let totalDistTraveled = 0;
+        let closestHit = null;
+        let minGlobalDist = Infinity;
 
-            const ox = obs.x - startX;
-            const oy = obs.y - startY;
-            const t = (ox * dx + oy * dy) / lenSq;
+        for (let i = 0; i < segments.length - 1; i++) {
+            const A = segments[i];
+            const B = segments[i + 1];
+            const dx = B.x - A.x;
+            const dy = B.y - A.y;
+            const segLen = Math.sqrt(dx * dx + dy * dy);
+            if (segLen === 0) continue;
 
-            // Only check obstacles strictly between shooter and target
-            if (t > 0.06 && t < 0.94) {
-                const projX = startX + t * dx;
-                const projY = startY + t * dy;
-                const distSq = (obs.x - projX) * (obs.x - projX) + (obs.y - projY) * (obs.y - projY);
-                const collideDist = (obs.radius || this.bubbleRadius || 31) + bulletRadius + toleranceMargin;
+            for (const bubble of bubbles) {
+                if (bubble.dead || bubble.isFalling) continue;
+
+                // Project bubble center onto segment A -> B
+                const ox = bubble.x - A.x;
+                const oy = bubble.y - A.y;
+                const t = (ox * dx + oy * dy) / (segLen * segLen);
+
+                // Distance from center to segment
+                const clampedT = Math.max(0, Math.min(1, t));
+                const px = A.x + clampedT * dx;
+                const py = A.y + clampedT * dy;
+
+                const distSq = (bubble.x - px) * (bubble.x - px) + (bubble.y - py) * (bubble.y - py);
+                const collideDist = (bubble.radius || this.bubbleRadius || 31) + bulletRadius;
+
                 if (distSq <= collideDist * collideDist) {
-                    return true;
+                    const globalDist = totalDistTraveled + clampedT * segLen;
+                    if (globalDist < minGlobalDist) {
+                        minGlobalDist = globalDist;
+                        closestHit = {
+                            bubble,
+                            segmentIndex: i,
+                            globalDist
+                        };
+                    }
                 }
             }
-        }
-        return false;
-    }
 
-    findClearBounceAngle(target, obstacles) {
-        const bulletRadius = 14;
-        const wallMargin = bulletRadius;
-
-        // 1. Try Left Wall Bounce (mirrored virtual target)
-        const leftVirtualX = 2 * wallMargin - target.x;
-        const leftDx = leftVirtualX - this.turretX;
-        const leftDy = target.y - this.turretY;
-        const leftAngle = Math.atan2(Math.min(leftDy, -15), leftDx);
-
-        if (Math.cos(leftAngle) < -0.01) {
-            const tWall = (wallMargin - this.turretX) / Math.cos(leftAngle);
-            if (tWall > 0) {
-                const wallHitY = this.turretY + tWall * Math.sin(leftAngle);
-                const seg1Blocked = this.isLineBlockedByObstacle(this.turretX, this.turretY, wallMargin, wallHitY, obstacles);
-                const seg2Blocked = this.isLineBlockedByObstacle(wallMargin, wallHitY, target.x, target.y, obstacles);
-                if (!seg1Blocked && !seg2Blocked && wallHitY > target.y && wallHitY < this.turretY) {
-                    return leftAngle;
-                }
+            // A hit in the earlier segment always intercepts before subsequent segments (e.g. after bounce)
+            if (closestHit && closestHit.segmentIndex === i) {
+                break;
             }
+
+            totalDistTraveled += segLen;
         }
 
-        // 2. Try Right Wall Bounce (mirrored virtual target)
-        const rightWallX = this.width - wallMargin;
-        const rightVirtualX = 2 * rightWallX - target.x;
-        const rightDx = rightVirtualX - this.turretX;
-        const rightDy = target.y - this.turretY;
-        const rightAngle = Math.atan2(Math.min(rightDy, -15), rightDx);
-
-        if (Math.cos(rightAngle) > 0.01) {
-            const tWall = (rightWallX - this.turretX) / Math.cos(rightAngle);
-            if (tWall > 0) {
-                const wallHitY = this.turretY + tWall * Math.sin(rightAngle);
-                const seg1Blocked = this.isLineBlockedByObstacle(this.turretX, this.turretY, rightWallX, wallHitY, obstacles);
-                const seg2Blocked = this.isLineBlockedByObstacle(rightWallX, wallHitY, target.x, target.y, obstacles);
-                if (!seg1Blocked && !seg2Blocked && wallHitY > target.y && wallHitY < this.turretY) {
-                    return rightAngle;
-                }
-            }
-        }
-
-        return null;
+        return closestHit ? closestHit.bubble : null;
     }
 
     think(speedMultiplier = 1.0) {
@@ -254,9 +271,7 @@ export class AIController {
             return;
         }
 
-        // Filter out obstacle bubbles completely - AI never intentionally targets obstacles
         const nonObstacles = allBubbles.filter(b => b.type !== 'obstacle');
-        const obstacles = allBubbles.filter(b => b.type === 'obstacle');
 
         // Edge case: entire board contains only obstacles
         if (nonObstacles.length === 0) {
@@ -265,7 +280,7 @@ export class AIController {
             return;
         }
 
-        // Find the lowest (frontmost) bubble in each column
+        // Identify the lowest (frontmost) bubble in each column
         const lowestInCol = new Map();
         for (const b of allBubbles) {
             const currentLowest = lowestInCol.get(b.col);
@@ -274,43 +289,56 @@ export class AIController {
             }
         }
 
-        // Score all non-obstacle bubbles to pick the best strategic target
+        // Generate candidate firing trajectories (direct shots & bank shots)
+        const candidateAngles = [];
+
+        for (const b of nonObstacles) {
+            const dx = b.x - this.turretX;
+            const dy = b.y - this.turretY;
+            const directAngle = Math.atan2(Math.min(dy, -15), dx);
+            candidateAngles.push({ angle: directAngle, isDirect: true, sourceBubble: b });
+
+            // Left wall bounce
+            const leftVirtualX = 28 - b.x;
+            const leftAngle = Math.atan2(Math.min(dy, -15), leftVirtualX - this.turretX);
+            if (Math.cos(leftAngle) < -0.05) {
+                candidateAngles.push({ angle: leftAngle, isDirect: false, sourceBubble: b });
+            }
+
+            // Right wall bounce
+            const rightVirtualX = 2 * (this.width - 14) - b.x;
+            const rightAngle = Math.atan2(Math.min(dy, -15), rightVirtualX - this.turretX);
+            if (Math.cos(rightAngle) > 0.05) {
+                candidateAngles.push({ angle: rightAngle, isDirect: false, sourceBubble: b });
+            }
+        }
+
+        // Raycast each trajectory to determine which bubble is ACTUALLY hit first!
         let bestTarget = null;
         let bestAimAngle = null;
         let bestScore = -Infinity;
 
-        for (const b of nonObstacles) {
-            const isDirectBlocked = this.isLineBlockedByObstacle(this.turretX, this.turretY, b.x, b.y, obstacles);
-            let candidateAngle = null;
-            let pathClear = false;
+        for (const cand of candidateAngles) {
+            const hit = this.getFirstBubbleAlongRay(this.turretX, this.turretY, cand.angle, allBubbles);
+            if (!hit) continue;
 
-            if (!isDirectBlocked) {
-                const dx = b.x - this.turretX;
-                const dy = b.y - this.turretY;
-                candidateAngle = Math.atan2(Math.min(dy, -15), dx);
-                pathClear = true;
-            } else {
-                // If direct path is blocked by an obstacle, check if bank shot can bypass it
-                const bounceAngle = this.findClearBounceAngle(b, obstacles);
-                if (bounceAngle !== null) {
-                    candidateAngle = bounceAngle;
-                    pathClear = true;
-                }
-            }
+            // Strict obstacle avoidance: if the shot hits an obstacle first, discard it completely!
+            if (hit.type === 'obstacle') continue;
 
+            // Score this valid shot on the ACTUAL hit bubble
             let score = 0;
 
             // 1. Threat priority: lower bubbles are closer to the danger line
-            score += (b.y / this.height) * 150;
+            score += (hit.y / this.height) * 160;
 
-            // 2. Frontline bonus: lowest bubble in its column
-            if (lowestInCol.get(b.col) === b) {
+            // 2. Lowest bubble in its column (frontline)
+            if (lowestInCol.get(hit.col) === hit) {
                 score += 50;
             }
 
             // 3. Strategic obstacle detonation bonus:
             // Eliminating bubbles adjacent to obstacles detonates those obstacles via clearAdjacentObstacles()!
-            const neighbors = Physics.getHexNeighbors(b.row, b.col, this.maxRows, this.maxCols);
+            const neighbors = Physics.getHexNeighbors(hit.row, hit.col, this.maxRows, this.maxCols);
             let adjacentObstacles = 0;
             for (const { r, c } of neighbors) {
                 const nb = this.grid[r]?.[c];
@@ -319,74 +347,82 @@ export class AIController {
                 }
             }
             if (adjacentObstacles > 0) {
-                score += adjacentObstacles * 80;
+                score += adjacentObstacles * 90;
             }
 
             // 4. Quick elimination bonuses
-            if (b.type.startsWith('item_')) {
+            if (hit.type.startsWith('item_')) {
                 score += 50;
-            } else if (b.type === 'prime_shield') {
-                score += 30;
-            } else if (b.value > 1 && MathUtil.isPrime(b.value)) {
+            } else if (hit.type === 'prime_shield') {
                 score += 40;
+            } else if (hit.value > 1 && MathUtil.isPrime(hit.value)) {
+                score += 60; // Single shot elimination!
+            } else if (hit.value <= 10) {
+                score += 20;
             }
 
-            // 5. Obstacle avoidance penalty
-            if (pathClear) {
-                score += 100;
-            } else {
-                // Severe penalty if trajectory hits an obstacle
-                score -= 1000;
-                const dx = b.x - this.turretX;
-                const dy = b.y - this.turretY;
-                candidateAngle = Math.atan2(Math.min(dy, -15), dx);
+            // 5. Prefer direct shots slightly over bank shots for stability
+            if (cand.isDirect) {
+                score += 15;
             }
 
             if (score > bestScore) {
                 bestScore = score;
-                bestTarget = b;
-                bestAimAngle = candidateAngle;
+                bestTarget = hit;
+                bestAimAngle = cand.angle;
             }
         }
 
-        this.targetBubble = bestTarget || nonObstacles[0];
+        // Safe fallback if every trajectory was obstructed
+        if (!bestTarget) {
+            bestTarget = nonObstacles[0];
+            const dx = bestTarget.x - this.turretX;
+            const dy = bestTarget.y - this.turretY;
+            bestAimAngle = Math.atan2(Math.min(dy, -15), dx);
+        }
 
-        // Smoothly rotate turret towards the chosen target / aim angle
+        this.targetBubble = bestTarget;
+
+        // Smoothly rotate turret towards the chosen angle
         if (bestAimAngle !== null) {
             this.aimAngle += (bestAimAngle - this.aimAngle) * 0.18;
-        } else if (this.targetBubble) {
-            const dx = this.targetBubble.x - this.turretX;
-            const dy = this.targetBubble.y - this.turretY;
-            const desiredAngle = Math.atan2(Math.min(dy, -15), dx);
-            this.aimAngle += (desiredAngle - this.aimAngle) * 0.18;
         }
 
         // Shoot cooldown management
         this.thinkCooldown -= speedMultiplier;
         if (this.thinkCooldown <= 0) {
-            this.thinkCooldown = Math.floor(Math.random() * 40) + 100; // ~1.7s to 2.3s per shot
+            this.thinkCooldown = Math.floor(Math.random() * (this.maxThinkDelay - this.minThinkDelay)) + this.minThinkDelay;
 
-            // Snap aimAngle to planned angle upon firing to avoid misfiring into obstacles
+            // Snap aimAngle to planned angle upon firing to guarantee pinpoint precision
             if (bestAimAngle !== null) {
                 this.aimAngle = bestAimAngle;
             }
 
-            // Decide which prime to shoot
+            // Decide which prime to shoot for the ACTUAL bubble that will be hit!
             let primeToShoot = 2;
-            const V = this.targetBubble ? this.targetBubble.value : 2;
-            const isSmart = Math.random() < 0.85;
+            const target = this.targetBubble;
+            const isSmart = Math.random() < this.accuracy;
 
-            if (this.targetBubble) {
-                if (this.targetBubble.type === 'prime_shield') {
+            if (target) {
+                const V = target.value;
+
+                if (target.type === 'prime_shield') {
+                    // Prime shield requires its exact prime value to break
                     primeToShoot = isSmart ? V : (V === 2 ? 3 : 2);
-                } else if (this.targetBubble.type.startsWith('item_')) {
+                } else if (target.type.startsWith('item_')) {
+                    // Items are triggered by any prime
                     primeToShoot = MathUtil.randomChoice([2, 3, 5, 7]);
                 } else if (V > 1) {
                     if (isSmart) {
+                        // 100% accurate factorization of the target bubble!
                         const factors = MathUtil.getPrimeFactors(V);
-                        primeToShoot = factors.length > 0 ? MathUtil.randomChoice(factors) : 2;
+                        if (factors.length > 0) {
+                            primeToShoot = MathUtil.randomChoice(factors);
+                        } else {
+                            primeToShoot = 2;
+                        }
                     } else {
-                        // Blunder: shoot prime that doesn't divide V
+                        // Blunder (only if this.accuracy < 1.0)
                         const wrongPrimes = ALL_PRIMES.filter(p => V % p !== 0);
                         primeToShoot = wrongPrimes.length > 0 ? MathUtil.randomChoice(wrongPrimes.slice(0, 5)) : 5;
                     }
@@ -652,8 +688,9 @@ export class AIController {
 
     triggerAttack(count, reason) {
         const now = Date.now();
-        if (this.lastAttackTime && now - this.lastAttackTime < 3500) {
-            // Buffer: Prevent rapid attack bursts within 3.5s
+        const cooldown = this.attackCooldownMs !== undefined ? this.attackCooldownMs : 2000;
+        if (this.lastAttackTime && now - this.lastAttackTime < cooldown) {
+            // Buffer: Prevent rapid attack bursts
             return;
         }
         this.lastAttackTime = now;

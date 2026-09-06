@@ -341,15 +341,16 @@ export class Particle {
 }
 
 export class FloatingText {
-    constructor(x, y, text, color = '#ffffff', size = 18) {
+    constructor(x, y, text, color = '#ffffff', size = 18, options = {}) {
         this.x = x;
         this.y = y;
         this.text = text;
         this.color = color;
         this.size = size;
         this.alpha = 1.0;
-        this.vy = -1.6;
-        this.decay = 0.022;
+        this.vy = options.vy !== undefined ? options.vy : -1.6;
+        this.decay = options.decay !== undefined ? options.decay : 0.022;
+        this.isAmmoIndicator = options.isAmmoIndicator || false;
     }
 
     update() {
@@ -364,7 +365,7 @@ export class FloatingText {
         ctx.fillStyle = this.color;
         ctx.font = `bold ${this.size}px 'Orbitron', 'Inter', sans-serif`;
         ctx.textAlign = 'center';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 3.5;
         ctx.strokeStyle = '#050a14';
         ctx.strokeText(this.text, this.x, this.y);
         ctx.fillText(this.text, this.x, this.y);

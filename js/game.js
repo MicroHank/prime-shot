@@ -638,6 +638,23 @@ class GameEngine {
         this.currentPrime = prime;
         audio.playSwitch();
         this.updateHUD();
+
+        // Spawn quick-read floating prime badge in exact center of player area (fades within 0.5s)
+        this.floatingTexts = this.floatingTexts.filter(ft => !ft.isAmmoIndicator);
+        const c = PRIME_COLORS[prime] || PRIME_COLORS.DEFAULT;
+        const ft = new FloatingText(
+            this.width / 2,
+            this.height / 2,
+            `⚡ 質數 ${prime}`,
+            c.main,
+            36,
+            {
+                decay: 0.0334, // 30 frames at 60 FPS = 0.5s
+                vy: -1.4,
+                isAmmoIndicator: true
+            }
+        );
+        this.floatingTexts.push(ft);
     }
 
     shoot() {

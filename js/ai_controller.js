@@ -54,10 +54,11 @@ export class AIController {
         this.canvas.width = width;
         this.canvas.height = height;
         this.turretX = width / 2;
-        this.turretY = height - 40;
-        this.dangerLineY = height - 110;
+        this.turretY = height - 38;
+        this.dangerLineY = height - 75;
         this.maxRows = 14;
         this.maxCols = Math.min(5, Math.max(4, Math.floor(width / (this.bubbleRadius * 2))));
+        this.lastAttackTime = Date.now();
     }
 
     reset(initialRows = 3) {
@@ -71,6 +72,7 @@ export class AIController {
         this.particles = [];
         this.floatingTexts = [];
         this.lightningArcs = [];
+        this.lastAttackTime = Date.now();
         this.fallingBubbles = [];
         this.aimAngle = -Math.PI / 2;
         this.thinkCooldown = 90;
@@ -170,8 +172,8 @@ export class AIController {
 
         const allBubbles = this.getAllGridBubbles();
         if (allBubbles.length === 0) {
-            // If AI cleared board, send attack and spawn 2 rows
-            this.onAttackOpponent(2, '🤖 AI 完美全清！送出 2 排！');
+            // If AI cleared board, send attack with buffer and spawn 2 rows
+            this.triggerAttack(1, '🤖 AI 完美全清！送出 1 排！');
             for (let r = 0; r < 2; r++) {
                 this.fillGridRow(r);
             }
@@ -349,9 +351,9 @@ export class AIController {
         this.clearCombo++;
         this.clearComboTimer = 240;
 
-        // Increased threshold: 4-kill streak
-        if (this.clearCombo === 4) {
-            this.onAttackOpponent(1, `🤖 AI 達成 4 連消！送出 1 排！`);
+        // Increased threshold: 5-kill streak
+        if (this.clearCombo >= 5) {
+            this.triggerAttack(1, `🤖 AI 達成 5 連消！送出 1 排！`);
             this.clearCombo = 0;
         }
     }
@@ -452,9 +454,9 @@ export class AIController {
                 }
             });
 
-            // Increased threshold: 4 or more multiples to send 1 row
-            if (multiples.length >= 4) {
-                this.onAttackOpponent(1, `⚡ AI 超導大共鳴 x${multiples.length}！送出 1 排！`);
+            // High threshold: ONLY massive resonance (>= 6 multiples) sends 1 row
+            if (multiples.length >= 6) {
+                this.triggerAttack(1, `⚡ AI 超導大共鳴 x${multiples.length}！送出 1 排！`);
             }
 
             this.checkAvalanche();
@@ -470,11 +472,21 @@ export class AIController {
                 this.fallingBubbles.push(fb);
             });
 
-            // Increased threshold: 5 or more floating bubbles collapse sends 1 row
-            if (floating.length >= 5) {
-                this.onAttackOpponent(1, `🏔️ AI 誘發大崩塌 x${floating.length}！送出 1 排！`);
+            // High threshold: 6 or more floating bubbles collapse sends 1 row
+            if (floating.length >= 6) {
+                this.triggerAttack(1, `🏔️ AI 誘發大崩塌 x${floating.length}！送出 1 排！`);
             }
         }
+    }
+
+    triggerAttack(count, reason) {
+        const now = Date.now();
+        if (this.lastAttackTime && now - this.lastAttackTime < 3500) {
+            // Buffer: Prevent rapid attack bursts within 3.5s
+            return;
+        }
+        this.lastAttackTime = now;
+        this.onAttackOpponent(count, reason);
     }
 
     pushRowFromOpponent(count = 1) {

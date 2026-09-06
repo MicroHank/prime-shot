@@ -110,8 +110,8 @@ class GameEngine {
                 this.canvas.height = this.height;
 
                 this.turretX = this.width / 2;
-                this.turretY = this.height - 40;
-                this.dangerLineY = this.height - 110;
+                this.turretY = this.height - 38;
+                this.dangerLineY = this.height - 75;
                 this.bubbleRadius = 31;
                 this.maxCols = Math.min(5, Math.max(4, Math.floor(this.width / (this.bubbleRadius * 2))));
                 this.maxRows = 14;
@@ -181,6 +181,7 @@ class GameEngine {
 
         // Fire on click within container
         container.addEventListener('mousedown', (e) => {
+            if (this.gameOver || this.gameWon) return; // Never shoot or trigger side-effects if round has ended
             if (e.target.closest('button') || e.target.closest('.modal-content')) return;
             audio.init();
             audio.resume();
@@ -1243,12 +1244,16 @@ class GameEngine {
         if (toggleBtn) toggleBtn.innerText = '👁️ 檢視盤面';
         modalMsg.innerText = msg;
 
+        modal.style.display = 'flex';
         modal.classList.add('active');
     }
 
     hideModal() {
         const modal = document.getElementById('game-modal');
-        if (modal) modal.classList.remove('active');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.remove('active');
+        }
     }
 
     togglePause() {

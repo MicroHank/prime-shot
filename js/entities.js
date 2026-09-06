@@ -209,7 +209,8 @@ export class Bubble {
 
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.font = '32px sans-serif';
+            const obstacleEmojiSize = Math.round(26 * (currentR / 36));
+            ctx.font = `${obstacleEmojiSize}px sans-serif`;
             ctx.fillText('🧱', this.x, this.y + 2);
 
             ctx.restore();
@@ -239,32 +240,35 @@ export class Bubble {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
+        const iconScale = currentR / 36;
         if (this.type === 'item_catalyst') {
             ctx.fillStyle = '#ffd700';
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 3;
-            ctx.font = 'bold 30px "Orbitron", sans-serif';
+            const catFont = Math.round(25 * iconScale);
+            ctx.font = `bold ${catFont}px "Orbitron", sans-serif`;
             ctx.strokeText('+1', this.x, this.y + 1);
             ctx.fillText('+1', this.x, this.y + 1);
         } else if (this.type === 'item_clock') {
-            ctx.font = '34px sans-serif';
+            ctx.font = `${Math.round(27 * iconScale)}px sans-serif`;
             ctx.fillText('⏳', this.x, this.y + 1);
         } else if (this.type === 'item_sieve') {
-            ctx.font = '34px sans-serif';
+            ctx.font = `${Math.round(27 * iconScale)}px sans-serif`;
             ctx.fillText('⚡', this.x, this.y + 1);
         } else if (this.type === 'item_bomb') {
-            ctx.font = '34px sans-serif';
+            ctx.font = `${Math.round(27 * iconScale)}px sans-serif`;
             ctx.fillText('💣', this.x, this.y + 1);
         } else {
             // Number Bubble - razor-sharp high contrast text with dark outline
             const displayVal = this.value;
-            let fontSize = 34;
-            if (displayVal >= 1000) fontSize = 22;
-            else if (displayVal >= 100) fontSize = 26;
-            else if (displayVal >= 10) fontSize = 30;
+            let baseSize = 29;
+            if (displayVal >= 1000) baseSize = 19;
+            else if (displayVal >= 100) baseSize = 22;
+            else if (displayVal >= 10) baseSize = 25;
+            const fontSize = Math.max(14, Math.round(baseSize * iconScale));
 
             ctx.font = `900 ${fontSize}px 'Orbitron', 'Inter', monospace`;
-            ctx.lineWidth = 4;
+            ctx.lineWidth = Math.max(2.5, 3.5 * iconScale);
             ctx.strokeStyle = '#050a14';
             ctx.strokeText(displayVal, this.x, this.y + 1);
             ctx.fillStyle = '#ffffff';
@@ -274,8 +278,9 @@ export class Bubble {
             if (this.type === 'prime_shield') {
                 ctx.fillStyle = '#ff8099';
                 ctx.strokeStyle = '#000000';
-                ctx.lineWidth = 2.5;
-                ctx.font = 'bold 12px sans-serif';
+                ctx.lineWidth = 2;
+                const shieldFont = Math.max(9, Math.round(10 * iconScale));
+                ctx.font = `bold ${shieldFont}px sans-serif`;
                 ctx.strokeText('🛡️質數盾', this.x, this.y + currentR * 0.62);
                 ctx.fillText('🛡️質數盾', this.x, this.y + currentR * 0.62);
             }

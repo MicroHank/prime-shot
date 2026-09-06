@@ -64,7 +64,7 @@ class GameEngine {
 
         // Player Turret
         this.turretX = this.width / 2;
-        this.turretY = this.height - 42;
+        this.turretY = this.height - 75;
         this.aimAngle = -Math.PI / 2;
         this.mousePos = { x: this.width / 2, y: 100 };
         this.hoveredBubble = null;
@@ -76,7 +76,7 @@ class GameEngine {
 
         this.slowMoTimer = 0;
 
-        this.dangerLineY = this.height - 90;
+        this.dangerLineY = this.height - 128;
 
         // AI Controller for Versus Battle Mode
         this.aiCanvas = document.getElementById('aiCanvas');
@@ -120,9 +120,9 @@ class GameEngine {
                 this.canvas.height = this.height;
 
                 this.turretX = this.width / 2;
-                this.turretY = this.height - 38;
-                this.dangerLineY = this.height - 75;
-                this.bubbleRadius = 31;
+                this.turretY = this.height - 75;
+                this.dangerLineY = this.height - 128;
+                this.bubbleRadius = 27;
                 this.maxCols = Math.min(5, Math.max(4, Math.floor(this.width / (this.bubbleRadius * 2))));
                 this.maxRows = 14;
 
@@ -136,10 +136,10 @@ class GameEngine {
                 this.canvas.height = this.height;
 
                 this.turretX = this.width / 2;
-                this.turretY = this.height - 42;
-                this.dangerLineY = this.height - 90;
+                this.turretY = this.height - 75;
+                this.dangerLineY = this.height - 128;
                 this.bubbleRadius = Physics.GRID_RADIUS;
-                this.maxCols = Math.min(7, Math.max(6, Math.floor(this.width / Physics.getColWidth())));
+                this.maxCols = Math.min(8, Math.max(6, Math.floor(this.width / Physics.getColWidth())));
                 this.maxRows = 14;
             }
         };
@@ -382,17 +382,6 @@ class GameEngine {
             modalRetry.addEventListener('click', () => {
                 this.hideModal();
                 this.restartCurrentMode();
-            });
-        }
-
-        const modalToggle = document.getElementById('modal-btn-toggle-view');
-        if (modalToggle) {
-            modalToggle.addEventListener('click', () => {
-                const modalContent = document.querySelector('.modal-content');
-                if (modalContent) {
-                    const isMin = modalContent.classList.toggle('minimized');
-                    modalToggle.innerText = isMin ? '📋 顯示結果' : '👁️ 檢視盤面';
-                }
             });
         }
     }
@@ -1159,7 +1148,7 @@ class GameEngine {
             this.highScore = this.score;
             try {
                 localStorage.setItem('prime_split_highscore', this.highScore.toString());
-            } catch (e) {}
+            } catch (e) { }
             const highEl = document.getElementById('high-score-val');
             if (highEl) highEl.innerText = this.highScore;
         }
@@ -1510,17 +1499,14 @@ class GameEngine {
         const modalTitle = document.getElementById('modal-title');
         const modalMsg = document.getElementById('modal-message');
         const statsBox = document.getElementById('modal-stats-container');
-        const toggleBtn = document.getElementById('modal-btn-toggle-view');
 
         modalTitle.innerText = title;
         const mainColor = isWin ? '#00ff88' : '#ff0055';
         modalTitle.style.color = mainColor;
         if (modalContent) {
-            modalContent.classList.remove('minimized');
             modalContent.style.borderColor = mainColor;
             modalContent.style.boxShadow = `0 10px 40px rgba(0, 0, 0, 0.9), 0 0 35px ${isWin ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 0, 85, 0.4)'}`;
         }
-        if (toggleBtn) toggleBtn.innerText = '👁️ 檢視盤面';
         modalMsg.innerText = msg;
 
         if (statsBox) {
@@ -1652,13 +1638,10 @@ class GameEngine {
     }
 
     drawDangerLine() {
-        const time = Date.now() * 0.005;
-        const pulse = 0.5 + Math.sin(time) * 0.4;
-
         this.ctx.save();
-        this.ctx.strokeStyle = `rgba(255, 0, 85, ${pulse})`;
-        this.ctx.lineWidth = 2.5;
-        this.ctx.setLineDash([12, 8]);
+        this.ctx.strokeStyle = 'rgba(255, 0, 85, 0.75)';
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([8, 6]);
         this.ctx.beginPath();
         this.ctx.moveTo(0, this.dangerLineY);
         this.ctx.lineTo(this.width, this.dangerLineY);
@@ -1666,7 +1649,8 @@ class GameEngine {
 
         this.ctx.fillStyle = 'rgba(255, 0, 85, 0.85)';
         this.ctx.font = 'bold 11px "Orbitron", sans-serif';
-        this.ctx.fillText("⚠️ DANGER LINE 警戒防線 ⚠️", this.width - 120, this.dangerLineY - 6);
+        this.ctx.textAlign = 'right';
+        this.ctx.fillText("⚠️ DANGER LINE 警戒防線 ⚠️", this.width - 10, this.dangerLineY - 6);
         this.ctx.restore();
     }
 

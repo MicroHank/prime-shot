@@ -15,7 +15,7 @@ export class AIController {
         this.width = canvas.width || 340;
         this.height = canvas.height || 750;
 
-        this.bubbleRadius = 31; // Accommodates 5 bubbles across ~330px width
+        this.bubbleRadius = 27; // Accommodates 5 bubbles across ~330px width
         this.maxRows = 14;
         this.maxCols = 5;
 
@@ -38,8 +38,8 @@ export class AIController {
         this.fallingBubbles = [];
 
         this.turretX = this.width / 2;
-        this.turretY = this.height - 40;
-        this.dangerLineY = this.height - 110;
+        this.turretY = this.height - 75;
+        this.dangerLineY = this.height - 128;
         this.aimAngle = -Math.PI / 2;
 
         this.currentPrime = 2;
@@ -108,8 +108,9 @@ export class AIController {
         this.canvas.width = width;
         this.canvas.height = height;
         this.turretX = width / 2;
-        this.turretY = height - 38;
-        this.dangerLineY = height - 75;
+        this.turretY = height - 75;
+        this.dangerLineY = height - 128;
+        this.bubbleRadius = 27;
         this.maxRows = 14;
         this.maxCols = Math.min(5, Math.max(4, Math.floor(width / (this.bubbleRadius * 2))));
         this.lastAttackTime = Date.now();
@@ -804,19 +805,21 @@ export class AIController {
             this.ctx.stroke();
         }
 
-        // Danger Line
-        this.ctx.strokeStyle = '#ff0055';
+        // Danger Line (matches player's Danger Line, steady & non-flashing)
+        this.ctx.save();
+        this.ctx.strokeStyle = 'rgba(255, 0, 85, 0.75)';
         this.ctx.lineWidth = 2;
-        this.ctx.setLineDash([5, 5]);
+        this.ctx.setLineDash([8, 6]);
         this.ctx.beginPath();
         this.ctx.moveTo(0, this.dangerLineY);
         this.ctx.lineTo(this.width, this.dangerLineY);
         this.ctx.stroke();
-        this.ctx.setLineDash([]);
 
-        this.ctx.fillStyle = 'rgba(255, 0, 85, 0.7)';
-        this.ctx.font = 'bold 10px monospace';
-        this.ctx.fillText('CPU DANGER LINE', 8, this.dangerLineY - 4);
+        this.ctx.fillStyle = 'rgba(255, 0, 85, 0.85)';
+        this.ctx.font = 'bold 11px "Orbitron", sans-serif';
+        this.ctx.textAlign = 'right';
+        this.ctx.fillText("⚠️ DANGER LINE 警戒防線 ⚠️", this.width - 10, this.dangerLineY - 6);
+        this.ctx.restore();
 
         // Draw Aim trajectory
         this.ctx.strokeStyle = 'rgba(255, 0, 85, 0.35)';
@@ -862,24 +865,38 @@ export class AIController {
 
         // Base
         this.ctx.beginPath();
-        this.ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        this.ctx.arc(0, 0, 26, 0, Math.PI * 2);
         this.ctx.fillStyle = '#1e1b4b';
         this.ctx.fill();
         this.ctx.strokeStyle = '#ff0055';
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 2.5;
         this.ctx.stroke();
 
         // Barrel
-        this.ctx.rotate(this.aimAngle);
-        this.ctx.fillStyle = '#ff0055';
-        this.ctx.fillRect(0, -5, 26, 10);
+        this.ctx.save();
+        const safeAngle = isFinite(this.aimAngle) ? this.aimAngle : -Math.PI / 2;
+        this.ctx.rotate(safeAngle);
+        this.ctx.fillStyle = '#1e293b';
+        this.ctx.fillRect(0, -6, 36, 12);
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeStyle = '#ff0055';
+        this.ctx.strokeRect(0, -6, 36, 12);
 
-        // Next ammo in barrel
-        this.ctx.beginPath();
-        this.ctx.arc(10, 0, 7, 0, Math.PI * 2);
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.fill();
+        this.ctx.fillStyle = '#ff0055';
+        this.ctx.fillRect(32, -8, 6, 16);
         this.ctx.restore();
+
+        // Core Ammo in Turret Center with Current Prime
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 13, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#ff0055';
+        this.ctx.fill();
+
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = `bold ${this.currentPrime >= 10 ? 11 : 13}px "Orbitron", sans-serif`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(this.currentPrime, 0, 1);
 
         this.ctx.restore();
     }

@@ -628,16 +628,6 @@ header.game-header {
     transform: translateY(-2px);
 }
 
-.btn-modal-secondary {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.btn-modal-secondary:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
 .btn-modal-accent {
     background: rgba(255, 215, 0, 0.15);
     color: #ffd700;

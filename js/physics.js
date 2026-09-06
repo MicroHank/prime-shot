@@ -80,7 +80,7 @@ export class Vector2 {
 }
 
 export const Physics = {
-    GRID_RADIUS: 42, // Radius of grid bubbles (yields 6~7 bubbles across narrower 600~640px canvas)
+    GRID_RADIUS: 36, // Radius of grid bubbles (slightly smaller, yields 7~8 bubbles across 600~650px canvas)
     
     getRowHeight() {
         return this.GRID_RADIUS * 1.85; 
@@ -95,7 +95,7 @@ export const Physics = {
         const radius = customRadius || this.GRID_RADIUS;
         const colWidth = radius * 2;
         const rowHeight = radius * 1.85;
-        const maxCols = Math.min(7, Math.max(4, Math.floor(canvasWidth / colWidth)));
+        const maxCols = Math.min(8, Math.max(4, Math.floor(canvasWidth / colWidth)));
         const marginX = Math.max(0, (canvasWidth - (maxCols * colWidth)) / 2);
 
         const x = marginX + col * colWidth + radius;

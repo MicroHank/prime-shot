@@ -17,7 +17,9 @@ const MIME_TYPES = {
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
     '.svg': 'image/svg+xml',
-    '.ico': 'image/x-icon'
+    '.ico': 'image/x-icon',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav'
 };
 
 const server = http.createServer((req, res) => {
@@ -27,8 +29,8 @@ const server = http.createServer((req, res) => {
     const safePath = path.normalize(reqPath).replace(/^(\.\.[\/\\])+/, '');
     const filePath = path.join(__dirname, safePath);
 
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
+    fs.stat(filePath, (err, stats) => {
+        if (err || !stats.isFile()) {
             res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('404 Not Found');
             return;
@@ -36,12 +38,44 @@ const server = http.createServer((req, res) => {
 
         const ext = path.extname(filePath).toLowerCase();
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        const totalSize = stats.size;
+        const range = req.headers.range;
 
-        res.writeHead(200, {
-            'Content-Type': contentType,
-            'Cache-Control': 'no-cache'
-        });
-        res.end(data);
+        if (range) {
+            const parts = range.replace(/bytes=/, '').split('-');
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+            if (start >= totalSize || end >= totalSize || start > end) {
+                res.writeHead(416, {
+                    'Content-Range': `bytes */${totalSize}`,
+                    'Content-Type': 'text/plain; charset=utf-8'
+                });
+                res.end('416 Requested Range Not Satisfiable');
+                return;
+            }
+
+            const chunkSize = (end - start) + 1;
+            res.writeHead(206, {
+                'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunkSize,
+                'Content-Type': contentType,
+                'Cache-Control': 'no-cache'
+            });
+
+            const stream = fs.createReadStream(filePath, { start, end });
+            stream.pipe(res);
+        } else {
+            res.writeHead(200, {
+                'Content-Length': totalSize,
+                'Accept-Ranges': 'bytes',
+                'Content-Type': contentType,
+                'Cache-Control': 'no-cache'
+            });
+            const stream = fs.createReadStream(filePath);
+            stream.pipe(res);
+        }
     });
 });
 

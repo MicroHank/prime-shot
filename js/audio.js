@@ -13,15 +13,37 @@ class SoundFX {
         this.bgmStep = 0;
         this.bgmPlaying = false;
         this.nextNoteTime = 0;
-        this.baseBgmVolume = 0.12;
+        this.baseBgmVolume = 1;
         this.initialized = false;
+        this.bgmAudio = null;
+        this.useProceduralBGM = false;
     }
 
     init() {
+        // Initialize HTML5 Audio for custom BGM file (bgm/bgm2.mp3)
+        if (!this.bgmAudio && typeof Audio !== 'undefined') {
+            try {
+                this.bgmAudio = new Audio('bgm/bgm2.mp3');
+                this.bgmAudio.loop = true;
+                this.bgmAudio.volume = this.muted ? 0 : this.baseBgmVolume;
+                this.bgmAudio.addEventListener('error', (err) => {
+                    console.warn('bgm2.mp3 playback error, falling back to procedural synth BGM:', err);
+                    this.useProceduralBGM = true;
+                    if (this.bgmPlaying) {
+                        this.startProceduralBGM();
+                    }
+                });
+            } catch (e) {
+                console.warn('Could not initialize Audio for bgm2.mp3:', e);
+                this.useProceduralBGM = true;
+            }
+        }
+
         if (this.initialized) {
             this.resume();
             return;
         }
+
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             this.ctx = new AudioContext();
@@ -31,7 +53,7 @@ class SoundFX {
             this.sfxGain.connect(this.ctx.destination);
 
             this.bgmGain = this.ctx.createGain();
-            this.bgmGain.gain.value = this.muted ? 0 : this.baseBgmVolume;
+            this.bgmGain.gain.value = this.muted ? 0 : 0.12;
             this.bgmGain.connect(this.ctx.destination);
 
             this.initialized = true;
@@ -50,6 +72,11 @@ class SoundFX {
         this.init();
         this.resume();
         this.muted = !this.muted;
+
+        if (this.bgmAudio) {
+            this.bgmAudio.volume = this.muted ? 0 : this.baseBgmVolume;
+        }
+
         const now = this.ctx ? this.ctx.currentTime : 0;
         if (this.sfxGain && this.ctx) {
             this.sfxGain.gain.cancelScheduledValues(now);
@@ -57,18 +84,24 @@ class SoundFX {
         }
         if (this.bgmGain && this.ctx) {
             this.bgmGain.gain.cancelScheduledValues(now);
-            this.bgmGain.gain.setValueAtTime(this.muted ? 0 : this.baseBgmVolume, now);
+            this.bgmGain.gain.setValueAtTime(this.muted ? 0 : 0.12, now);
         }
-        if (!this.muted && !this.bgmPlaying) {
-            this.startBGM();
+
+        if (!this.muted && this.bgmPlaying) {
+            if (this.bgmAudio && !this.useProceduralBGM && this.bgmAudio.paused) {
+                this.bgmAudio.play().catch(() => { });
+            }
         }
         return this.muted;
     }
 
     setBGMVolume(vol) {
         this.baseBgmVolume = Math.max(0, Math.min(1, vol));
+        if (this.bgmAudio && !this.muted) {
+            this.bgmAudio.volume = this.baseBgmVolume;
+        }
         if (this.bgmGain && this.ctx && !this.muted) {
-            this.bgmGain.gain.setValueAtTime(this.baseBgmVolume, this.ctx.currentTime);
+            this.bgmGain.gain.setValueAtTime(this.baseBgmVolume * 0.35, this.ctx.currentTime);
         }
     }
 
@@ -288,13 +321,43 @@ class SoundFX {
         osc.stop(this.ctx.currentTime + 0.05);
     }
 
-    // Procedural Cyberpunk Synth BGM Sequencer
+    // Start Background Music (bgm/bgm2.mp3 with procedural fallback)
     startBGM() {
         this.init();
         this.resume();
-        if (!this.initialized || this.bgmPlaying) return;
-
         this.bgmPlaying = true;
+
+        if (this.bgmAudio && !this.useProceduralBGM) {
+            this.bgmAudio.volume = this.muted ? 0 : this.baseBgmVolume;
+            const playPromise = this.bgmAudio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                    console.warn('bgm2.mp3 play was prevented or failed, falling back to procedural BGM:', err);
+                    this.useProceduralBGM = true;
+                    this.startProceduralBGM();
+                });
+            }
+        } else {
+            this.startProceduralBGM();
+        }
+    }
+
+    startAmbientMusic() {
+        this.startBGM();
+    }
+
+    stopBGM() {
+        this.bgmPlaying = false;
+        if (this.bgmAudio) {
+            this.bgmAudio.pause();
+        }
+        this.stopProceduralBGM();
+    }
+
+    // Procedural Cyberpunk Synth BGM Sequencer (Fallback Engine)
+    startProceduralBGM() {
+        if (!this.initialized || this.bgmTimer) return;
+
         this.bgmStep = 0;
         this.nextNoteTime = this.ctx.currentTime + 0.05;
 
@@ -305,13 +368,13 @@ class SoundFX {
         // 4 bars of 16 steps = 64 steps
         const bassNotes = [
             // Bar 1 (Am)
-            55, 0, 55, 110,  55, 0, 65.4, 82.4,  55, 0, 55, 110,  65.4, 82.4, 55, 0,
+            55, 0, 55, 110, 55, 0, 65.4, 82.4, 55, 0, 55, 110, 65.4, 82.4, 55, 0,
             // Bar 2 (F)
-            43.65, 0, 43.65, 87.3,  43.65, 0, 55, 65.4,  43.65, 0, 43.65, 87.3,  55, 65.4, 43.65, 0,
+            43.65, 0, 43.65, 87.3, 43.65, 0, 55, 65.4, 43.65, 0, 43.65, 87.3, 55, 65.4, 43.65, 0,
             // Bar 3 (C)
-            65.4, 0, 65.4, 130.8,  65.4, 0, 49, 82.4,  65.4, 0, 65.4, 130.8,  49, 82.4, 65.4, 0,
+            65.4, 0, 65.4, 130.8, 65.4, 0, 49, 82.4, 65.4, 0, 65.4, 130.8, 49, 82.4, 65.4, 0,
             // Bar 4 (G)
-            49, 0, 49, 98,  49, 0, 61.7, 73.4,  49, 0, 49, 98,  61.7, 73.4, 49, 0
+            49, 0, 49, 98, 49, 0, 61.7, 73.4, 49, 0, 49, 98, 61.7, 73.4, 49, 0
         ];
 
         // Atmospheric chord frequencies for each bar
@@ -412,12 +475,7 @@ class SoundFX {
         this.bgmTimer = setInterval(scheduler, lookaheadMs);
     }
 
-    startAmbientMusic() {
-        this.startBGM();
-    }
-
-    stopBGM() {
-        this.bgmPlaying = false;
+    stopProceduralBGM() {
         if (this.bgmTimer) {
             clearInterval(this.bgmTimer);
             this.bgmTimer = null;

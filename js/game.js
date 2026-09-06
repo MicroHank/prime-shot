@@ -20,7 +20,11 @@ class GameEngine {
 
         // Game State
         this.score = 0;
-        this.highScore = parseInt(localStorage.getItem('prime_split_highscore') || '0', 10);
+        try {
+            this.highScore = parseInt(localStorage.getItem('prime_split_highscore') || '0', 10);
+        } catch (e) {
+            this.highScore = 0;
+        }
         this.stage = 1;
         this.advancingStage = false;
         this.combo = 0;
@@ -140,8 +144,13 @@ class GameEngine {
     }
 
     setupInputs() {
+        const container = document.getElementById('canvas-container') || this.canvas;
+
         const getCanvasCoords = (clientX, clientY) => {
             const rect = this.canvas.getBoundingClientRect();
+            if (!rect || rect.width <= 0 || rect.height <= 0) {
+                return { x: this.turretX, y: 100 };
+            }
             const scaleX = this.canvas.width / rect.width;
             const scaleY = this.canvas.height / rect.height;
             return {
@@ -150,23 +159,38 @@ class GameEngine {
             };
         };
 
-        // Aim with mouse
-        this.canvas.addEventListener('mousemove', (e) => {
-            const pos = getCanvasCoords(e.clientX, e.clientY);
+        const updateAim = (clientX, clientY) => {
+            const pos = getCanvasCoords(clientX, clientY);
+            if (!isFinite(pos.x) || !isFinite(pos.y)) return;
             this.mousePos.x = pos.x;
             this.mousePos.y = pos.y;
 
             const dx = this.mousePos.x - this.turretX;
             const dy = this.mousePos.y - this.turretY;
-            this.aimAngle = Math.atan2(Math.min(dy, -15), dx);
-
+            const angle = Math.atan2(Math.min(dy, -15), dx);
+            if (isFinite(angle)) {
+                this.aimAngle = angle;
+            }
             this.updateHoveredBubble();
+        };
+
+        // Aim across entire play area container (covers dual arenas, divider, top bar)
+        container.addEventListener('mousemove', (e) => {
+            updateAim(e.clientX, e.clientY);
+        });
+        window.addEventListener('mousemove', (e) => {
+            // Also update if dragging or aiming towards edges
+            if (e.buttons > 0) {
+                updateAim(e.clientX, e.clientY);
+            }
         });
 
-        // Fire on click
-        this.canvas.addEventListener('mousedown', (e) => {
+        // Fire on click within container
+        container.addEventListener('mousedown', (e) => {
+            if (e.target.closest('button') || e.target.closest('.modal-content')) return;
             audio.init();
             audio.resume();
+            updateAim(e.clientX, e.clientY);
             if (e.button === 0) {
                 // Left click: shoot
                 this.shoot();
@@ -177,10 +201,10 @@ class GameEngine {
             }
         });
 
-        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        container.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // Mouse wheel: cycle prime ammo
-        this.canvas.addEventListener('wheel', (e) => {
+        container.addEventListener('wheel', (e) => {
             e.preventDefault();
             audio.init();
             if (e.deltaY > 0) {
@@ -190,31 +214,37 @@ class GameEngine {
             }
         }, { passive: false });
 
-        // Touch support
+        // Touch support across container
         const handleTouch = (e) => {
-            e.preventDefault();
+            if (e.target.closest('button') || e.target.closest('.modal-content')) return;
             audio.init();
             audio.resume();
-            if (e.touches.length > 0) {
-                const pos = getCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
-                this.mousePos.x = pos.x;
-                this.mousePos.y = pos.y;
-                const dx = this.mousePos.x - this.turretX;
-                const dy = this.mousePos.y - this.turretY;
-                this.aimAngle = Math.atan2(Math.min(dy, -15), dx);
-                this.updateHoveredBubble();
+            if (e.touches && e.touches.length > 0) {
+                updateAim(e.touches[0].clientX, e.touches[0].clientY);
             }
         };
 
-        this.canvas.addEventListener('touchstart', (e) => {
+        container.addEventListener('touchstart', (e) => {
+            if (e.target.closest('button') || e.target.closest('.modal-content')) return;
             handleTouch(e);
             this.shoot();
-        }, { passive: false });
-        this.canvas.addEventListener('touchmove', handleTouch, { passive: false });
+        }, { passive: true });
+        container.addEventListener('touchmove', handleTouch, { passive: true });
 
-        // Keyboard shortcuts: Q (previous), W (next), 1-4, Space
+        // Keyboard shortcuts: Q (previous), W (next), 1-4, Space, Enter
         window.addEventListener('keydown', (e) => {
             audio.init();
+
+            // Quick restart with Space or Enter on game over / won
+            if (this.gameOver || this.gameWon) {
+                if (e.code === 'Space' || e.code === 'Enter') {
+                    e.preventDefault();
+                    this.hideModal();
+                    this.restartCurrentMode();
+                    return;
+                }
+            }
+
             if (e.code === 'KeyQ' || e.key.toLowerCase() === 'q') {
                 e.preventDefault();
                 this.cycleAmmo(-1);
@@ -229,7 +259,7 @@ class GameEngine {
                 this.setAmmo(5);
             } else if (e.key === '4') {
                 this.setAmmo(7);
-            } else if (e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'r') {
+            } else if (e.key.toLowerCase() === 'e') {
                 this.triggerUltimate();
             } else if (e.key.toLowerCase() === 'p') {
                 this.togglePause();
@@ -549,8 +579,9 @@ class GameEngine {
     shoot() {
         if (this.gameOver || this.gameWon || this.paused) return;
 
-        let primeToShoot = this.currentPrime;
+        let primeToShoot = this.currentPrime || 2;
         if (!primeToShoot) return;
+        if (!isFinite(this.aimAngle)) this.aimAngle = -Math.PI / 2;
 
         const speed = 16;
         const vx = Math.cos(this.aimAngle) * speed;
@@ -630,11 +661,11 @@ class GameEngine {
 
             if (this.gridOffsetY >= rowHeight) {
                 this.gridOffsetY -= rowHeight;
-                // Shift rows downward
+                // Shift rows downward with safe array copying
                 for (let r = this.maxRows - 1; r > 0; r--) {
-                    this.grid[r] = this.grid[r - 1];
+                    this.grid[r] = this.grid[r - 1] ? [...this.grid[r - 1]] : new Array(this.maxCols).fill(null);
                     for (let c = 0; c < this.maxCols; c++) {
-                        if (this.grid[r][c]) {
+                        if (this.grid[r]?.[c]) {
                             this.grid[r][c].row = r;
                         }
                     }
@@ -1043,8 +1074,11 @@ class GameEngine {
         this.score += pts;
         if (this.score > this.highScore) {
             this.highScore = this.score;
-            localStorage.setItem('prime_split_highscore', this.highScore.toString());
-            document.getElementById('high-score-val').innerText = this.highScore;
+            try {
+                localStorage.setItem('prime_split_highscore', this.highScore.toString());
+            } catch (e) {}
+            const highEl = document.getElementById('high-score-val');
+            if (highEl) highEl.innerText = this.highScore;
         }
 
         if (label) {
@@ -1222,7 +1256,7 @@ class GameEngine {
 
             // 5. Visual highlight and particles on the newly added top row
             for (let c = 0; c < this.maxCols; c++) {
-                const nb = this.grid[0][c];
+                const nb = this.grid[0]?.[c];
                 if (nb) {
                     nb.flashTimer = 14;
                     const pos = Physics.gridToWorld(0, c, 0, this.width, this.bubbleRadius);
@@ -1496,8 +1530,9 @@ class GameEngine {
     }
 
     drawAimLine() {
+        const safeAngle = isFinite(this.aimAngle) ? this.aimAngle : -Math.PI / 2;
         const points = Physics.calculateAimTrajectory(
-            this.turretX, this.turretY, this.aimAngle,
+            this.turretX, this.turretY, safeAngle,
             this.width, this.height, 2, 700
         );
 
@@ -1555,7 +1590,8 @@ class GameEngine {
         this.ctx.stroke();
 
         this.ctx.save();
-        this.ctx.rotate(this.aimAngle);
+        const safeAngle = isFinite(this.aimAngle) ? this.aimAngle : -Math.PI / 2;
+        this.ctx.rotate(safeAngle);
 
         const c = PRIME_COLORS[this.currentPrime] || PRIME_COLORS.DEFAULT;
         this.ctx.fillStyle = '#1e293b';
@@ -1584,9 +1620,13 @@ class GameEngine {
     }
 
     loop() {
-        this.update();
-        this.render();
         requestAnimationFrame(() => this.loop());
+        try {
+            this.update();
+            this.render();
+        } catch (err) {
+            console.error("Game loop error:", err);
+        }
     }
 }
 

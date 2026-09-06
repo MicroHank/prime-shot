@@ -541,7 +541,7 @@ export class AIController {
 
             // 5. Visual highlight and particles on the newly added top row
             for (let c = 0; c < this.maxCols; c++) {
-                const nb = this.grid[0][c];
+                const nb = this.grid[0]?.[c];
                 if (nb) {
                     nb.flashTimer = 14;
                     const pos = Physics.gridToWorld(0, c, 0, this.width, this.bubbleRadius);

@@ -200,11 +200,14 @@ export const Physics = {
 
     // Raycast trajectory prediction for aiming laser with border ricochet
     calculateAimTrajectory(startX, startY, angle, width, height, maxBounces = 2, maxDistance = 900) {
+        const safeAngle = isFinite(angle) ? angle : -Math.PI / 2;
         const points = [{ x: startX, y: startY }];
         let currX = startX;
         let currY = startY;
-        let dirX = Math.cos(angle);
-        let dirY = Math.sin(angle);
+        let dirX = Math.cos(safeAngle);
+        let dirY = Math.sin(safeAngle);
+        if (Math.abs(dirX) < 0.0001) dirX = dirX < 0 ? -0.0001 : 0.0001;
+        if (Math.abs(dirY) < 0.0001) dirY = dirY < 0 ? -0.0001 : 0.0001;
         let remainingDist = maxDistance;
 
         for (let b = 0; b <= maxBounces && remainingDist > 0; b++) {

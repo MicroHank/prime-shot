@@ -38,7 +38,6 @@ export class AIController {
         this.clearCombo = 0;
         this.clearComboTimer = 0;
         this.score = 0;
-        this.skillCharge = 0;
 
         this.thinkCooldown = 90;
         this.targetBubble = null;
@@ -68,7 +67,6 @@ export class AIController {
         this.clearCombo = 0;
         this.clearComboTimer = 0;
         this.score = 0;
-        this.skillCharge = 10;
         this.bullets = [];
         this.particles = [];
         this.floatingTexts = [];
@@ -202,12 +200,6 @@ export class AIController {
         if (this.thinkCooldown <= 0) {
             this.thinkCooldown = Math.floor(Math.random() * 40) + 100; // ~1.7s to 2.3s per shot (natural human pacing)
 
-            // Check if AI can use Ultimate
-            if (this.skillCharge >= 100) {
-                this.triggerUltimate();
-                return;
-            }
-
             // Decide which prime to shoot
             let primeToShoot = 2;
             const V = this.targetBubble.value;
@@ -258,29 +250,7 @@ export class AIController {
         }
     }
 
-    triggerUltimate() {
-        if (this.skillCharge < 100 || this.gameOver) return;
-        this.skillCharge = 0;
 
-        this.floatingTexts.push(new FloatingText(this.width / 2, this.height / 2, '⚡ AI 貫穿風暴 ⚡', '#b844ff', 20));
-
-        const baseAngle = this.aimAngle;
-        const spread = 0.4;
-        const count = 5;
-        for (let i = 0; i < count; i++) {
-            const angle = baseAngle - spread / 2 + (spread / (count - 1)) * i;
-            const speed = 16;
-            const b = new Bullet(
-                this.turretX, this.turretY,
-                Math.cos(angle) * speed, Math.sin(angle) * speed,
-                7, { isPiercing: true, bounces: 2, radius: 14 }
-            );
-            this.bullets.push(b);
-        }
-
-        // Heavy attack sent to player
-        this.onAttackOpponent(1, '⚡ AI 發動大招！送出 1 排！');
-    }
 
     update(speedMultiplier = 1.0) {
         if (this.gameOver) return;
@@ -411,7 +381,6 @@ export class AIController {
                 this.clearAdjacentObstacles(bubble);
                 this.removeGridBubble(bubble);
                 bullet.active = false;
-                this.skillCharge = Math.min(100, this.skillCharge + 15);
                 this.recordElimination(bubble.x, bubble.y, true, bubble.value);
                 this.checkAvalanche();
             } else {
@@ -433,7 +402,6 @@ export class AIController {
             const Q = Math.floor(V / P);
             this.combo++;
             this.comboTimer = 180;
-            this.skillCharge = Math.min(100, this.skillCharge + 10);
 
             this.floatingTexts.push(new FloatingText(bubble.x, bubble.y - 15, `÷${P}`, bullet.colorInfo.main, 18));
 

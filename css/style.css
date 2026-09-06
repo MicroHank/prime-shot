@@ -424,58 +424,7 @@ header.game-header {
     text-shadow: 0 0 10px rgba(255, 42, 133, 0.5);
 }
 
-/* Ultimate Skill Bar & Button */
-.skill-bar-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-}
 
-.skill-track {
-    width: 100%;
-    height: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.skill-fill {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #b844ff, #00f0ff);
-    box-shadow: 0 0 12px #00f0ff;
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn-ult {
-    width: 100%;
-    background: rgba(184, 68, 255, 0.15);
-    border: 1px solid var(--accent-violet);
-    color: #d8b4fe;
-    font-family: var(--font-display);
-    font-size: 0.72rem;
-    font-weight: 700;
-    padding: 6px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.3s;
-    text-align: center;
-}
-
-.btn-ult.ready {
-    background: var(--accent-violet);
-    color: #fff;
-    box-shadow: 0 0 18px var(--accent-violet);
-    animation: ultGlow 1s infinite alternate;
-}
-
-@keyframes ultGlow {
-    0% { transform: scale(1); box-shadow: 0 0 12px var(--accent-violet); }
-    100% { transform: scale(1.03); box-shadow: 0 0 20px #fff, 0 0 25px var(--accent-violet); }
-}
 
 /* Canvas Container (Narrower & Taller) */
 #canvas-container {
@@ -633,60 +582,7 @@ header.game-header {
     text-shadow: 0 0 8px rgba(255, 51, 102, 0.6);
 }
 
-/* Strategy Guide Drawer */
-.guide-card {
-    width: 100%;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    overflow: hidden;
-}
 
-.guide-header {
-    padding: 8px 14px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-family: var(--font-display);
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: #94a3b8;
-    transition: all 0.2s;
-}
-
-.guide-header:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.04);
-}
-
-.guide-body {
-    display: none;
-    padding: 10px 14px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    font-size: 0.78rem;
-    line-height: 1.5;
-    color: #cbd5e1;
-}
-
-.guide-body.active {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.guide-item {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 8px 10px;
-    border-radius: 6px;
-    border-left: 3px solid var(--accent-cyan);
-}
-
-.guide-item h4 {
-    color: #fff;
-    margin-bottom: 3px;
-    font-size: 0.82rem;
-}
 
 /* Non-blocking Result HUD Card (Completely transparent, NO Dark Mask, NO Blur!) */
 .game-modal {

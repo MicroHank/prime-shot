@@ -5,7 +5,7 @@
 
 import { MathUtil, ALL_PRIMES, PRIME_TIERS, PRIME_COLORS } from './math_util.js';
 import { Physics, Vector2 } from './physics.js';
-import { Bullet, Bubble, Particle, FloatingText, LightningArc, Missile } from './entities.js';
+import { Bullet, Bubble, Particle, FloatingText, LightningArc } from './entities.js';
 import { ModeController } from './modes.js';
 import { audio } from './audio.js';
 import { AIController } from './ai_controller.js';
@@ -48,7 +48,6 @@ class GameEngine {
 
         // Entities
         this.bullets = [];
-        this.missiles = [];
         this.particles = [];
         this.floatingTexts = [];
         this.lightningArcs = [];
@@ -65,8 +64,6 @@ class GameEngine {
         this.currentPrime = 2;
         this.allPrimes = ALL_PRIMES;
 
-        // Special Skills & Charge
-        this.skillCharge = 0; // 0 to 100
         this.slowMoTimer = 0;
 
         this.dangerLineY = this.height - 90;
@@ -256,8 +253,6 @@ class GameEngine {
                 this.setAmmo(5);
             } else if (e.key === '4') {
                 this.setAmmo(7);
-            } else if (e.key.toLowerCase() === 'e') {
-                this.triggerUltimate();
             } else if (e.key.toLowerCase() === 'p') {
                 this.togglePause();
             }
@@ -293,11 +288,7 @@ class GameEngine {
             });
         });
 
-        // Ultimate skill button
-        const ultBtn = document.getElementById('btn-ultimate');
-        if (ultBtn) {
-            ultBtn.addEventListener('click', () => this.triggerUltimate());
-        }
+
 
         // Restart button
         const restartBtn = document.getElementById('btn-restart');
@@ -386,12 +377,10 @@ class GameEngine {
         this.modeMgr.setMode(mode);
         this.score = 0;
         this.combo = 0;
-        this.skillCharge = 0;
         this.gameOver = false;
         this.gameWon = false;
         this.paused = false;
         this.bullets = [];
-        this.missiles = [];
         this.particles = [];
         this.floatingTexts = [];
         this.lightningArcs = [];
@@ -579,22 +568,7 @@ class GameEngine {
         this.updateHUD();
     }
 
-    triggerUltimate() {
-        if (this.skillCharge < 100 || this.gameOver || this.gameWon) return;
 
-        this.skillCharge = 0;
-        audio.playBomb();
-
-        this.floatingTexts.push(new FloatingText(this.width / 2, this.height * 0.45, '🚀 反物質重型飛彈發射！ 🚀', '#ff1744', 24));
-
-        const speed = 20;
-        const vx = Math.cos(this.aimAngle) * speed;
-        const vy = Math.sin(this.aimAngle) * speed;
-        const missile = new Missile(this.turretX, this.turretY, vx, vy, this.aimAngle);
-        this.missiles.push(missile);
-
-        this.updateHUD();
-    }
 
     update() {
         if (this.paused) return;
@@ -678,51 +652,7 @@ class GameEngine {
         this.bullets.forEach(b => b.update(this.width, this.height));
         this.bullets = this.bullets.filter(b => b.active);
 
-        // Update Missiles
-        for (const missile of this.missiles) {
-            if (!missile.active) continue;
-            missile.update(this.width, this.height);
 
-            // Check collision with any grid bubble
-            const gridBubbles = this.getAllGridBubbles();
-            for (const bubble of gridBubbles) {
-                if (bubble.dead || bubble.isFalling) continue;
-                if (Physics.checkCircleOverlap(missile, bubble)) {
-                    missile.active = false;
-                    audio.playBomb();
-                    this.floatingTexts.push(new FloatingText(bubble.x, bubble.y - 25, "💥 飛彈核爆命中！", '#ff1744', 24));
-
-                    // Direct hit destruction
-                    this.popBubble(bubble, true);
-                    this.clearAdjacentObstacles(bubble);
-                    this.removeGridBubble(bubble);
-
-                    // Splash area damage (destroy nearby bubbles within splash radius)
-                    const splashRadius = this.bubbleRadius * 2.5;
-                    for (const other of gridBubbles) {
-                        if (other === bubble || other.dead || other.isFalling) continue;
-                        const dist = Math.hypot(other.x - bubble.x, other.y - bubble.y);
-                        if (dist <= splashRadius) {
-                            this.popBubble(other, false);
-                            this.clearAdjacentObstacles(other);
-                            this.removeGridBubble(other);
-                        }
-                    }
-
-                    // Explosion particles
-                    for (let i = 0; i < 8; i++) {
-                        this.particles.push(new Particle(bubble.x, bubble.y, '#ff3d00', 'spark'));
-                        this.particles.push(new Particle(bubble.x, bubble.y, '#ffd700', 'coin'));
-                    }
-
-                    this.checkAvalanche();
-                    this.updateSmartPrimes();
-                    this.updateHUD();
-                    break;
-                }
-            }
-        }
-        this.missiles = this.missiles.filter(m => m.active);
 
         // Update Falling/Avalanche Debris Bubbles
         this.fallingBubbles.forEach(b => b.update(this.width, this.height, speedMultiplier));
@@ -865,14 +795,12 @@ class GameEngine {
                 this.clearAdjacentObstacles(bubble);
                 this.removeGridBubble(bubble);
                 this.addScore(160 * (this.combo + 1), bubble.x, bubble.y, "FACTOR CLEAR!");
-                this.chargeSkill(18);
                 this.recordElimination(bubble.x, bubble.y, false);
                 this.checkAvalanche();
             } else {
                 // Division in grid
                 bubble.setValue(Q);
                 this.addScore(60 * (this.combo + 1), bubble.x, bubble.y);
-                this.chargeSkill(8);
 
                 for (let k = 0; k < 4; k++) {
                     this.particles.push(new Particle(bubble.x, bubble.y, bullet.colorInfo.main, 'spark'));
@@ -1073,10 +1001,7 @@ class GameEngine {
         this.updateHUD();
     }
 
-    chargeSkill(amount) {
-        this.skillCharge = Math.min(100, this.skillCharge + amount);
-        this.updateHUD();
-    }
+
 
     checkModeClearConditions() {
         if (this.gameOver || this.gameWon) return;
@@ -1353,19 +1278,7 @@ class GameEngine {
             }
         });
 
-        // Skill gauge
-        const skillFill = document.getElementById('skill-gauge-fill');
-        const ultBtn = document.getElementById('btn-ultimate');
-        if (skillFill) {
-            skillFill.style.width = `${this.skillCharge}%`;
-            if (this.skillCharge >= 100) {
-                ultBtn.classList.add('ready');
-                ultBtn.innerText = "🚀 飛彈就緒! (按 E)";
-            } else {
-                ultBtn.classList.remove('ready');
-                ultBtn.innerText = `蓄能: ${Math.floor(this.skillCharge)}%`;
-            }
-        }
+
     }
 
     render() {
@@ -1396,7 +1309,6 @@ class GameEngine {
 
         this.lightningArcs.forEach(la => la.draw(this.ctx));
         this.bullets.forEach(b => b.draw(this.ctx));
-        this.missiles.forEach(m => m.draw(this.ctx));
         this.particles.forEach(p => p.draw(this.ctx));
         this.floatingTexts.forEach(ft => ft.draw(this.ctx));
 

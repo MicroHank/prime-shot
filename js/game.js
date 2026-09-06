@@ -63,7 +63,6 @@ class GameEngine {
 
         // Ammo Selection System (2 ~ 97)
         this.currentPrime = 2;
-        this.nextPrime = 3;
         this.allPrimes = ALL_PRIMES;
 
         // Special Skills & Charge
@@ -99,10 +98,8 @@ class GameEngine {
             const isVs = (this.modeMgr && this.modeMgr.currentMode === 'vs');
             const container = document.getElementById('canvas-container');
             if (!container) return;
-            const topBar = document.getElementById('game-arena-top-bar');
-            const topBarHeight = (topBar && topBar.offsetHeight) ? topBar.offsetHeight : 0;
             const rect = container.getBoundingClientRect();
-            const availableHeight = Math.max(640, Math.floor(rect.height - topBarHeight));
+            const availableHeight = Math.max(640, Math.floor(rect.height));
 
             if (isVs) {
                 const playerBox = document.getElementById('player-arena-box');
@@ -411,9 +408,6 @@ class GameEngine {
 
         const aiArenaBox = document.getElementById('ai-arena-box');
         const vsDivider = document.getElementById('vs-arena-divider');
-        const playerTag = document.getElementById('player-arena-tag');
-        const aiTag = document.getElementById('ai-arena-tag');
-        const topVsBadge = document.getElementById('top-bar-vs-badge');
         const layout = document.querySelector('.game-container-layout');
         const mainArea = document.querySelector('.game-main-area');
         const canvasContainer = document.getElementById('canvas-container');
@@ -421,17 +415,6 @@ class GameEngine {
         if (mode === 'vs') {
             if (aiArenaBox) aiArenaBox.style.display = 'flex';
             if (vsDivider) vsDivider.style.display = 'flex';
-            if (playerTag) {
-                playerTag.style.display = 'inline-flex';
-                playerTag.innerHTML = '🧑‍🚀 玩家戰場';
-                playerTag.style.borderColor = 'var(--accent-cyan)';
-            }
-            if (aiTag) {
-                aiTag.style.display = 'inline-flex';
-                aiTag.innerHTML = '🤖 電腦 CPU <span id="ai-hud-status" class="ai-hud-status"></span>';
-                aiTag.style.borderColor = '#ff0055';
-            }
-            if (topVsBadge) topVsBadge.style.display = 'inline-block';
             if (layout) layout.classList.add('vs-active');
             if (mainArea) mainArea.classList.add('vs-active');
             if (canvasContainer) canvasContainer.classList.add('vs-active');
@@ -449,7 +432,6 @@ class GameEngine {
                 this.fillGridRow(r);
             }
             this.currentPrime = 2;
-            this.nextPrime = 3;
 
             // Reset AI board
             if (this.aiController) {
@@ -459,13 +441,6 @@ class GameEngine {
         } else {
             if (aiArenaBox) aiArenaBox.style.display = 'none';
             if (vsDivider) vsDivider.style.display = 'none';
-            if (playerTag) {
-                playerTag.style.display = 'inline-flex';
-                playerTag.innerHTML = '🧑‍🚀 玩家戰場';
-                playerTag.style.borderColor = 'var(--accent-cyan)';
-            }
-            if (aiTag) aiTag.style.display = 'none';
-            if (topVsBadge) topVsBadge.style.display = 'none';
             if (layout) layout.classList.remove('vs-active');
             if (mainArea) mainArea.classList.remove('vs-active');
             if (canvasContainer) canvasContainer.classList.remove('vs-active');
@@ -480,7 +455,6 @@ class GameEngine {
                 this.fillGridRow(r);
             }
             this.currentPrime = 2;
-            this.nextPrime = 3;
         }
 
         this.updateSmartPrimes();
@@ -569,9 +543,6 @@ class GameEngine {
     setAmmo(prime) {
         if (this.modeMgr.currentMode === 'puzzle') return;
         this.currentPrime = prime;
-        const currIdx = this.allPrimes.indexOf(prime);
-        const nextIdx = (currIdx + 1) % this.allPrimes.length;
-        this.nextPrime = this.allPrimes[nextIdx] || 3;
         audio.playSwitch();
         this.updateHUD();
     }
@@ -1347,47 +1318,12 @@ class GameEngine {
         if (toggleBtn) toggleBtn.innerText = '👁️ 檢視盤面';
         modalMsg.innerText = msg;
 
-        // Visual highlights on Arena Tags in VS mode
-        if (this.modeMgr.currentMode === 'vs') {
-            const pTag = document.getElementById('player-arena-tag');
-            const aiTag = document.getElementById('ai-arena-tag');
-            if (isWin) {
-                if (pTag) {
-                    pTag.innerHTML = '🧑‍🚀 玩家戰場 <span style="color:#00ff88; font-weight:900;">👑 獲勝 WIN!</span>';
-                    pTag.style.borderColor = '#00ff88';
-                }
-                if (aiTag) {
-                    aiTag.innerHTML = '🤖 電腦 CPU <span style="color:#ff3366;">💥 防線失守</span>';
-                    aiTag.style.borderColor = '#ff3366';
-                }
-            } else {
-                if (pTag) {
-                    pTag.innerHTML = '🧑‍🚀 玩家戰場 <span style="color:#ff3366;">💥 防線失守</span>';
-                    pTag.style.borderColor = '#ff3366';
-                }
-                if (aiTag) {
-                    aiTag.innerHTML = '🤖 電腦 CPU <span style="color:#ffd700; font-weight:900;">👑 獲勝 WIN!</span>';
-                    aiTag.style.borderColor = '#ffd700';
-                }
-            }
-        }
-
         modal.classList.add('active');
     }
 
     hideModal() {
         const modal = document.getElementById('game-modal');
         if (modal) modal.classList.remove('active');
-        const pTag = document.getElementById('player-arena-tag');
-        const aiTag = document.getElementById('ai-arena-tag');
-        if (pTag) {
-            pTag.innerHTML = '🧑‍🚀 玩家戰場';
-            pTag.style.borderColor = 'var(--accent-cyan)';
-        }
-        if (aiTag) {
-            aiTag.innerHTML = '🤖 電腦 CPU <span id="ai-hud-status" class="ai-hud-status"></span>';
-            aiTag.style.borderColor = '#ff0055';
-        }
     }
 
     togglePause() {
@@ -1401,24 +1337,10 @@ class GameEngine {
             stageVal.innerText = this.stage;
         }
 
-        document.getElementById('score-val').innerText = this.score;
-        document.getElementById('combo-val').innerText = `x${this.combo}`;
-
-        // Current & Next Ammo Display
-        const currBadge = document.getElementById('hud-current-ammo');
-        if (currBadge) {
-            currBadge.innerText = this.currentPrime;
-            const c = PRIME_COLORS[this.currentPrime] || PRIME_COLORS.DEFAULT;
-            currBadge.style.color = c.main;
-            currBadge.style.borderColor = c.main;
-        }
-
-        const nextBadge = document.getElementById('hud-next-ammo');
-        if (nextBadge) {
-            nextBadge.innerText = this.nextPrime;
-            const nc = PRIME_COLORS[this.nextPrime] || PRIME_COLORS.DEFAULT;
-            nextBadge.style.color = nc.main;
-        }
+        const scoreEl = document.getElementById('score-val');
+        if (scoreEl) scoreEl.innerText = this.score;
+        const comboEl = document.getElementById('combo-val');
+        if (comboEl) comboEl.innerText = `x${this.combo}`;
 
         // Highlight active button in full palette and scroll into view
         document.querySelectorAll('.prime-pill-btn').forEach(btn => {

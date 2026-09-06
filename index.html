@@ -30,15 +30,6 @@
     <div class="game-main-area">
         <!-- Canvas Play Area (Dual Arena in Versus Mode) -->
         <main id="canvas-container">
-            <!-- Dedicated Top Status Bar: Keeps tags cleanly at Left and Right, off the bubble field! -->
-            <div id="game-arena-top-bar" class="game-arena-top-bar">
-                <div id="player-arena-tag" class="arena-tag player-tag">🧑‍🚀 玩家戰場</div>
-                <div id="top-bar-vs-badge" class="top-vs-badge" style="display: none;">VS</div>
-                <div id="ai-arena-tag" class="arena-tag ai-tag" style="display: none;">
-                    🤖 電腦 CPU <span id="ai-hud-status" class="ai-hud-status"></span>
-                </div>
-            </div>
-
             <div class="arena-wrapper">
                 <!-- Player Arena -->
                 <div id="player-arena-box" class="arena-box player">
@@ -70,32 +61,6 @@
                 </div>
             </div>
         </main>
-
-        <!-- Bottom Controls & Ammo Dock -->
-        <footer class="control-dock">
-            <div class="dock-header-row">
-                <!-- Current & Next Ammo Preview -->
-                <div class="ammo-preview-box">
-                    <div class="preview-unit">
-                        <span class="preview-label">當前發射</span>
-                        <div id="hud-current-ammo" class="ammo-orb">2</div>
-                    </div>
-                    <div class="preview-unit">
-                        <span class="preview-label">下一發</span>
-                        <div id="hud-next-ammo" class="ammo-orb next">3</div>
-                    </div>
-                </div>
-
-                <!-- Operation Hints -->
-                <div class="control-hints">
-                    <span><kbd>Q</kbd> 上一個質數</span>
-                    <span><kbd>W</kbd> 下一個質數</span>
-                    <span><kbd>1~4</kbd> 主力快捷 (2, 3, 5, 7)</span>
-                    <span><kbd>左鍵</kbd> 發射</span>
-                    <span><kbd>E</kbd> 飛彈大招</span>
-                </div>
-            </div>
-        </footer>
     </div>
 
     <!-- Right Sidebar: Title, Mode Selection & Real-time Stats Dashboard -->

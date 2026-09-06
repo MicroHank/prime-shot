@@ -672,9 +672,6 @@ export class AIController {
     }
 
     updateHUD() {
-        const hudEl = document.getElementById('ai-hud-status');
-        if (hudEl) {
-            hudEl.textContent = `[裝填: ${this.currentPrime} | COMBO x${this.combo}]`;
-        }
+        // AI status display removed per UI simplification
     }
 }
